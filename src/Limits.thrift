@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2008 by EverNote Corporation, All rights reserved.
+ * Copyright 2007-2012 Evernote Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -159,13 +159,12 @@ const string EDAM_MIME_TYPE_MP4_VIDEO = "video/mp4";
 const string EDAM_MIME_TYPE_INK = "application/vnd.evernote.ink";
 /** Canonical MIME type string for PDF resources */
 const string EDAM_MIME_TYPE_PDF = "application/pdf";
-/** MIME type used for file attachments for Premium accounts */
+/** MIME type used for attachments of an unspecified type */
 const string EDAM_MIME_TYPE_DEFAULT = "application/octet-stream";
 
 /**
- * The set of allowable resource MIME types for Resources that may be stored
- * within the notes of any Evernote user (Free or Premium).
- * Resources using other MIME types are not supported for Free accounts.
+ * The set of resource MIME types that are expected to be handled
+ * correctly by all of the major Evernote client applications.
  */
 const set<string> EDAM_MIME_TYPES = [
   EDAM_MIME_TYPE_GIF,
@@ -528,14 +527,17 @@ const i32   EDAM_USER_LINKED_NOTEBOOK_MAX = 100;
  * Maximum number of shared notebooks per notebook
  */
 const i32   EDAM_NOTEBOOK_SHARED_NOTEBOOK_MAX = 250;
+
 /**
  * The minimum length of the content class attribute of a note.
  */
 const i32   EDAM_NOTE_CONTENT_CLASS_LEN_MIN = 3;
+
 /**
  * The maximum length of the content class attribute of a note.
  */
 const i32   EDAM_NOTE_CONTENT_CLASS_LEN_MAX = 32;
+
 /**
  * This string constant is the prefix one can use to obtain all
  * types of notes for the Evernote 'Hello' application via
@@ -543,6 +545,7 @@ const i32   EDAM_NOTE_CONTENT_CLASS_LEN_MAX = 32;
  * content class.
  */
 const string EDAM_HELLO_APP_CONTENT_CLASS_PREFIX = "evernote.hello.";
+
 /**
  * This string constant is the prefix one can use to obtain all
  * types of notes for the Evernote 'Food' application via
@@ -550,26 +553,64 @@ const string EDAM_HELLO_APP_CONTENT_CLASS_PREFIX = "evernote.hello.";
  * content class.
  */
 const string EDAM_FOOD_APP_CONTENT_CLASS_PREFIX = "evernote.food.";
+
 /**
  * The regular expression that the content class of a note must match
  * to be valid.
  */
 const string EDAM_NOTE_CONTENT_CLASS_REGEX = "^[A-Za-z0-9_.-]{3,32}$";
+
 /**
  * The content class value used for notes structured specifically to
  * represent an encounter with a person, as is done with the
  * Evernote "Hello" application.
  */
 const string EDAM_CONTENT_CLASS_HELLO_ENCOUNTER = "evernote.hello.encounter";
+
 /**
  * The content class value used for notes structured specifically to
  * represent a profile of the user, as is done with the Evernote "Hello"
  * application.
  */
 const string EDAM_CONTENT_CLASS_HELLO_PROFILE = "evernote.hello.profile";
+
 /**
  * The content class value used for notes structured specifically to
  * capture the experience of a particular meal, as is done with the
  * Evernote "Food" application.
  */
 const string EDAM_CONTENT_CLASS_FOOD_MEAL = "evernote.food.meal";
+
+/**
+ * The content class value used for notes created by Skitch.
+ */
+const string EDAM_CONTENT_CLASS_SKITCH = "evernote.skitch";
+
+/**
+ * The minimum length of the plain text in a findRelated query, assuming that
+ * plaintext is being provided.
+ */
+const i32 EDAM_RELATED_PLAINTEXT_LEN_MIN = 1;
+
+/**
+ * The maximum length of the plain text in a findRelated query, assuming that
+ * plaintext is being provided.
+ */
+const i32 EDAM_RELATED_PLAINTEXT_LEN_MAX = 131072;
+
+/**
+ * The maximum number of notes that will be returned from a findRelated()
+ * query.
+ */
+const i32 EDAM_RELATED_MAX_NOTES = 25;
+
+/**
+ * The maximum number of notebooks that will be returned from a findRelated()
+ * query.
+ */
+const i32 EDAM_RELATED_MAX_NOTEBOOKS = 1;
+
+/**
+ * The maximum number of tags that will be returned from a findRelated() query.
+ */
+const i32 EDAM_RELATED_MAX_TAGS = 25;

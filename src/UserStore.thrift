@@ -20,7 +20,7 @@
  * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.    
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 /*
@@ -54,7 +54,7 @@ const i16 EDAM_VERSION_MAJOR = 1
  * Clients pass this to the service using UserStore.checkVersion at the
  * beginning of a session to confirm that they are not out of date.
  */
-const i16 EDAM_VERSION_MINOR = 21
+const i16 EDAM_VERSION_MINOR = 22
 
 //============================= Enumerations ==================================
 /**
@@ -92,7 +92,7 @@ enum SponsoredGroupRole {
  *   I.e. this is the URL that should be used to create the Thrift HTTP client
  *   transport to send messages to the NoteStore service for the account.
  *   </dd>
- * </dl> 
+ * </dl>
  */
 struct PublicUserInfo {
   1:  required  Types.UserID userId,
@@ -124,11 +124,11 @@ struct PublicUserInfo {
  *   </dd>
  * <dt>premiumExtendable:</dt>
  *   <dd>
- *   True if the user is eligible for purchasing Premium account extensions. 
+ *   True if the user is eligible for purchasing Premium account extensions.
  *   </dd>
  * <dt>premiumPending:</dt>
  *   <dd>
- *   True if the user's Premium account is pending payment confirmation 
+ *   True if the user's Premium account is pending payment confirmation
  *   </dd>
  * <dt>premiumCancellationPending:</dt>
  *   <dd>
@@ -155,7 +155,7 @@ struct PublicUserInfo {
  *   <dd>
  *   True if the user is the administrator of the business.
  *   </dd>
- * </dl> 
+ * </dl>
  */
 struct PremiumInfo {
   1:  required Types.Timestamp currentTime,
@@ -195,7 +195,7 @@ struct PremiumInfo {
  *   </dd>
  * <dt>user:</dt>
  *   <dd>
- *   Holds the information about the account which was 
+ *   Holds the information about the account which was
  *   authenticated if this was a full authentication.  May be absent if this
  *   particular authentication did not require user information.
  *   </dd>
@@ -226,7 +226,7 @@ struct PremiumInfo {
  */
 struct AuthenticationResult {
   1:  required Types.Timestamp currentTime,
-  2:  required string authenticationToken,  
+  2:  required string authenticationToken,
   3:  required Types.Timestamp expiration,
   4:  optional Types.User user,
   5:  optional PublicUserInfo publicUserInfo,
@@ -239,59 +239,59 @@ struct AuthenticationResult {
  *<dl>
  * <dt>serviceHost:</dt>
  *   <dd>
- *   The hostname and optional port for composing Evernote web service URLs. 
- *   This URL can be used to access the UserStore and related services, 
+ *   The hostname and optional port for composing Evernote web service URLs.
+ *   This URL can be used to access the UserStore and related services,
  *   but must not be used to compose the NoteStore URL. Client applications
- *   must handle serviceHost values that include only the hostname 
+ *   must handle serviceHost values that include only the hostname
  *   (e.g. www.evernote.com) or both the hostname and port (e.g. www.evernote.com:8080).
- *   If no port is specified, or if port 443 is specified, client applications must 
- *   use the scheme "https" when composing URLs. Otherwise, a client must use the 
- *   scheme "http". 
- * </dd> 
+ *   If no port is specified, or if port 443 is specified, client applications must
+ *   use the scheme "https" when composing URLs. Otherwise, a client must use the
+ *   scheme "http".
+ * </dd>
  * <dt>marketingUrl:</dt>
  *   <dd>
  *   The URL stem for the Evernote corporate marketing website, e.g. http://www.evernote.com.
  *   This stem can be used to compose website URLs. For example, the URL of the Evernote
- *   Trunk is composed by appending "/about/trunk/" to the value of marketingUrl. 
- *   </dd> 
+ *   Trunk is composed by appending "/about/trunk/" to the value of marketingUrl.
+ *   </dd>
  * <dt>supportUrl:</dt>
  *   <dd>
- *   The full URL for the Evernote customer support website, e.g. https://support.evernote.com. 
- *   </dd> 
+ *   The full URL for the Evernote customer support website, e.g. https://support.evernote.com.
+ *   </dd>
  * <dt>accountEmailDomain:</dt>
  *   <dd>
  *   The domain used for an Evernote user's incoming email address, which allows notes to
- *   be emailed into an account. E.g. m.evernote.com. 
- *   </dd> 
+ *   be emailed into an account. E.g. m.evernote.com.
+ *   </dd>
  * <dt>enableFacebookSharing:</dt>
  *   <dd>
  *   Whether the client application should enable sharing of notes on Facebook.
- *   </dd> 
+ *   </dd>
  * <dt>enableGiftSubscriptions:</dt>
  *   <dd>
  *   Whether the client application should enable gift subscriptions.
- *   </dd> 
+ *   </dd>
  * <dt>enableSupportTickets:</dt>
  *   <dd>
  *   Whether the client application should enable in-client creation of support tickets.
- *   </dd> 
+ *   </dd>
  * <dt>enableSharedNotebooks:</dt>
  *   <dd>
  *   Whether the client application should enable shared notebooks.
- *   </dd> 
+ *   </dd>
  * <dt>enableSingleNoteSharing:</dt>
  *   <dd>
  *   Whether the client application should enable single note sharing.
- *   </dd> 
+ *   </dd>
  * <dt>enableSponsoredAccounts:</dt>
  *   <dd>
  *   Whether the client application should enable sponsored accounts.
- *   </dd> 
+ *   </dd>
  * <dt>enableTwitterSharing:</dt>
  *   <dd>
  *   Whether the client application should enable sharing of notes on Twitter.
- *   </dd> 
- * </dl> 
+ *   </dd>
+ * </dl>
  */
 struct BootstrapSettings {
   1: required string serviceHost,
@@ -304,7 +304,8 @@ struct BootstrapSettings {
   8: optional bool enableSharedNotebooks,
   9: optional bool enableSingleNoteSharing,
   10: optional bool enableSponsoredAccounts,
-  11: optional bool enableTwitterSharing
+  11: optional bool enableTwitterSharing,
+  12: optional bool enableLinkedInSharing
 }
 
 /**
@@ -314,12 +315,12 @@ struct BootstrapSettings {
  *   <dd>
  *   The unique name of the profile, which is guaranteed to remain consistent across
  *   calls to getBootstrapInfo.
- *   </dd> 
+ *   </dd>
  * <dt>settings:</dt>
  *   <dd>
  *   The settings for this profile.
- *   </dd> 
- * </dl> 
+ *   </dd>
+ * </dl>
  */
 struct BootstrapProfile {
   1: required string name,
@@ -331,10 +332,10 @@ struct BootstrapProfile {
  *<dl>
  * <dt>profiles:</dt>
  *   <dd>
- *   List of one or more bootstrap profiles, in descending 
+ *   List of one or more bootstrap profiles, in descending
  *   preference order.
- *   </dd> 
- * </dl> 
+ *   </dd>
+ * </dl>
  */
 struct BootstrapInfo {
   1: required list<BootstrapProfile> profiles
@@ -348,8 +349,8 @@ struct BootstrapInfo {
  * SSL).  A client's first call to this interface should be checkVersion() to
  * ensure that the client's software is up to date.
  * </p>
- * All calls which require an authenticationToken may throw an 
- * EDAMUserException for the following reasons: 
+ * All calls which require an authenticationToken may throw an
+ * EDAMUserException for the following reasons:
  *  <ul>
  *   <li> AUTH_EXPIRED "authenticationToken" - token has expired
  *   <li> BAD_DATA_FORMAT "authenticationToken" - token is malformed
@@ -397,20 +398,20 @@ service UserStore {
    * @param locale
    *   The client's current locale, expressed in language[_country]
    *   format. E.g., "en_US". See ISO-639 and ISO-3166 for valid
-   *   language and country codes. 
+   *   language and country codes.
    *
    * @return
    *   The bootstrap information suitable for this client.
-   */                 
+   */
   BootstrapInfo getBootstrapInfo(1: string locale),
 
   /**
    * This is used to check a username and password in order to create an
    * authentication session that could be used for further actions.
-   * 
+   *
    * This function is only availabe to Evernote's internal applications.
    * Third party applications must authenticate using OAuth as
-   * described at 
+   * described at
    * <a href="http://dev.evernote.com/documentation/cloud/">dev.evernote.com</a>.
    *
    * @param username
@@ -438,7 +439,7 @@ service UserStore {
    *   about the User.
    *
    * @throws EDAMUserException <ul>
-   *   <li> DATA_REQUIRED "username" - username is empty 
+   *   <li> DATA_REQUIRED "username" - username is empty
    *   <li> DATA_REQUIRED "password" - password is empty
    *   <li> DATA_REQUIRED "consumerKey" - consumerKey is empty
    *   <li> INVALID_AUTH "username" - username not found
@@ -482,7 +483,7 @@ service UserStore {
    * The level of detail provided in the returned User structure depends on
    * the access level granted by the token, so a web service client may receive
    * fewer fields than an integrated desktop client.
-   */    
+   */
   Types.User getUser(1: string authenticationToken)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMSystemException systemException),
@@ -492,7 +493,7 @@ service UserStore {
    * a particular username.
    *
    * @throws EDAMUserException <ul>
-   *   <li> DATA_REQUIRED "username" - username is empty 
+   *   <li> DATA_REQUIRED "username" - username is empty
    * </ul>
    */
   PublicUserInfo getPublicUserInfo(1: string username)
@@ -507,7 +508,7 @@ service UserStore {
    */
   PremiumInfo getPremiumInfo(1: string authenticationToken)
     throws (1: Errors.EDAMUserException userException,
-            2: Errors.EDAMSystemException systemException)  
+            2: Errors.EDAMSystemException systemException)
 
   /**
    * Returns the URL that should be used to talk to the NoteStore for the
@@ -520,6 +521,6 @@ service UserStore {
    */
   string getNoteStoreUrl(1: string authenticationToken)
     throws (1: Errors.EDAMUserException userException,
-            2: Errors.EDAMSystemException systemException)  
+            2: Errors.EDAMSystemException systemException)
 
 }

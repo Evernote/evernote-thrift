@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2008 by EverNote Corporation, All rights reserved.
+ * Copyright 2007-2012 Evernote Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -43,7 +43,7 @@ namespace perl EDAMErrors
  * Numeric codes indicating the type of error that occurred on the
  * service.
  * <dl>
- *   <dt>UNKNOWN</dt
+ *   <dt>UNKNOWN</dt>
  *     <dd>No information available about the error</dd>
  *   <dt>BAD_DATA_FORMAT</dt>
  *     <dd>The format of the request data was incorrect</dd>

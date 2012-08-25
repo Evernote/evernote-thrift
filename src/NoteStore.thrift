@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2008 by Evernote Corporation, All rights reserved.
+ * Copyright 2007-2012 Evernote Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -806,6 +806,86 @@ struct ClientUsageMetrics {
 }
 
 /**
+ * A description of the thing for which we are searching for related
+ * entities.  You must choose exactly one field.
+ *
+ * <dl>
+ * <dt>noteGuid</dt>
+ * <dd>The GUID of an existing note in your account for which related
+ *     entities will be found.</dd>
+ *
+ * <dt>plainText</dt>
+ * <dd>A string of plain text for which to find related entities.
+ *     You should provide a text block with a number of characters between
+ *     EDAM_RELATED_PLAINTEXT_LEN_MIN and EDAM_RELATED_PLAINTEXT_LEN_MAX.
+ *     </dd>
+ * </dl>
+ */
+struct RelatedQuery {
+  1: optional string noteGuid,
+  2: optional string plainText
+}
+
+/**
+ * The result of calling findRelated().  The contents of the notes,
+ * notebooks, and tags fields will be in decreasing order of expected
+ * relevance.  It is possible that fewer results than requested will be
+ * returned even if there are enough distinct entities in the account
+ * in cases where the relevance is estimated to be low.
+ *
+ * <dl>
+ * <dt>notes</dt>
+ * <dd>If notes have been requested to be included, this will be the
+ *     list of notes.</dd>
+ *
+ * <dt>notebooks</dt>
+ * <dd>If notebooks have been requested to be included, this will be the
+ *     list of notebooks.</dd>
+ *
+ * <dt>tags</dt>
+ * <dd>If tags have been requested to be included, this will be the list
+ *     of tags.</dd>
+ * </dl>
+ */
+struct RelatedResult {
+  1: optional list<Types.Note> notes,
+  2: optional list<Types.Notebook> notebooks,
+  3: optional list<Types.Tag> tags
+}
+
+/**
+ * A description of the thing for which the service will find related
+ * entities, via findRelated(), together with a description of what
+ * type of entities and how many you are seeking in the
+ * RelatednessResult.
+ *
+ * <dl>
+ * <dt>maxNotes</dt>
+ * <dd>Return notes that are related to the query, but no more than
+ *     this many.  Any value greater than EDAM_RELATED_MAX_NOTES
+ *     will be silently capped.  If you do not set this field, then
+ *     no notes will be returned.</dd>
+ *
+ * <dt>maxNotebooks</dt>
+ * <dd>Return notebooks that are related to the query, but no more than
+ *     this many.  Any value greater than EDAM_RELATED_MAX_NOTEBOOKS
+ *     will be silently capped.  If you do not set this field, then
+ *     no notebooks will be returned.</dd>
+ *
+ * <dt>maxTags</dt>
+ * <dd>Return tags that are related to the query, but no more than
+ *     this many.  Any value greater than EDAM_RELATED_MAX_TAGS
+ *     will be silently capped.  If you do not set this field, then
+ *     no tags will be returned.</dd>
+ * </dl>
+ */
+struct RelatedResultSpec {
+  1: optional i32 maxNotes,
+  2: optional i32 maxNotebooks,
+  3: optional i32 maxTags
+}
+
+/**
  * Service:  NoteStore
  * <p>
  * The NoteStore service is used by EDAM clients to exchange information
@@ -1164,6 +1244,10 @@ service NoteStore {
    * After this action, the notebook is no longer available for undeletion, etc.
    * If the notebook contains any Notes, they will be moved to the current
    * default notebook and moved into the trash (i.e. Note.active=false).
+   * <p/>
+   * NOTE: This function is not available to third party applications.
+   * Calls will result in an EDAMUserException with the error code
+   * PERMISSION_DENIED.
    *
    * @param guid
    *   The GUID of the notebook to delete.
@@ -1342,6 +1426,10 @@ service NoteStore {
 
   /**
    * Permanently deletes the tag with the provided GUID, if present.
+   * <p/>
+   * NOTE: This function is not available to third party applications.
+   * Calls will result in an EDAMUserException with the error code
+   * PERMISSION_DENIED.
    *
    * @param guid
    *   The GUID of the tag to delete.
@@ -1461,7 +1549,11 @@ service NoteStore {
             3: Errors.EDAMNotFoundException notFoundException),
 
   /**
-   * Permanently deletes the search with the provided GUID, if present.
+   * Permanently deletes the saved search with the provided GUID, if present.
+   * <p/>
+   * NOTE: This function is not available to third party applications.
+   * Calls will result in an EDAMUserException with the error code
+   * PERMISSION_DENIED.
    *
    * @param guid
    *   The GUID of the search to delete.
@@ -2090,8 +2182,12 @@ service NoteStore {
             3: Errors.EDAMNotFoundException notFoundException),
 
   /**
-   * Permanently removes the Note, and all of its Resources,
+   * Permanently removes a Note, and all of its Resources,
    * from the service.
+   * <p/>
+   * NOTE: This function is not available to third party applications.
+   * Calls will result in an EDAMUserException with the error code
+   * PERMISSION_DENIED.
    *
    * @param guid
    *   The GUID of the note to delete.
@@ -2125,6 +2221,10 @@ service NoteStore {
    * be prohibitively slow if there are more than a few hundred notes.
    * If an exception is thrown for any of the GUIDs, then none of the notes
    * will be deleted.  I.e. this call can be treated as an atomic transaction.
+   * <p/>
+   * NOTE: This function is not available to third party applications.
+   * Calls will result in an EDAMUserException with the error code
+   * PERMISSION_DENIED.
    *
    * @param noteGuids
    *   The list of GUIDs for the Notes to remove.
@@ -2155,6 +2255,10 @@ service NoteStore {
    * <p/>
    * This operation may be relatively slow if the account contains a large
    * number of inactive Notes.
+   * <p/>
+   * NOTE: This function is not available to third party applications.
+   * Calls will result in an EDAMUserException with the error code
+   * PERMISSION_DENIED.
    *
    * @return
    *    The number of notes that were expunged.
@@ -2621,6 +2725,8 @@ service NoteStore {
   /**
    * Clients should make this call once per day to receive a bundle of ads that
    * will be displayed for the subsequent 24 hour period.
+   * <p/>
+   * NOTE: This function is not available to third party applications.
    *
    * @param adParameters
    *   A set of parameters that help the service determine which ads to return.
@@ -2633,6 +2739,8 @@ service NoteStore {
   /**
    * A thin client should make this call to retrieve a single random ad for
    * immediate display.
+   * <p/>
+   * NOTE: This function is not available to third party applications.
    *
    * @param adParameters
    *   A set of parameters to help the service determine which ad to return.
@@ -2687,7 +2795,7 @@ service NoteStore {
    *   attributes of the shared object are ignored.
    * @return
    *   The fully populated SharedNotebook object including the server assigned
-   *   share id and shareKey which can both the used to uniquely identify the
+   *   share id and shareKey which can both be used to uniquely identify the
    *   SharedNotebook.
    *
    * @throws EDAMUserException <ul>
@@ -2700,7 +2808,7 @@ service NoteStore {
    *   </ul>
    */
   Types.SharedNotebook createSharedNotebook(1: string authenticationToken,
-                                        2: Types.SharedNotebook sharedNotebook)
+                                            2: Types.SharedNotebook sharedNotebook)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMNotFoundException notFoundException,
             3: Errors.EDAMSystemException systemException),
@@ -2758,6 +2866,10 @@ service NoteStore {
   /**
    * Expunges the SharedNotebooks in the user's account using the
    * SharedNotebook.id as the identifier.
+   * <p/>
+   * NOTE: This function is not available to third party applications.
+   * Calls will result in an EDAMUserException with the error code
+   * PERMISSION_DENIED.
    *
    * @param
    *   sharedNotebookIds - a list of ShardNotebook.id longs identifying the
@@ -2837,6 +2949,10 @@ service NoteStore {
 
   /**
    * Permanently expunges the linked notebook from the account.
+   * <p/>
+   * NOTE: This function is not available to third party applications.
+   * Calls will result in an EDAMUserException with the error code
+   * PERMISSION_DENIED.
    *
    * @param guid
    *   The LinkedNotebook.guid field of the LinkedNotebook to permanently remove
@@ -3067,5 +3183,51 @@ service NoteStore {
                              2: string noteKey)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMNotFoundException notFoundException,
-            3: Errors.EDAMSystemException systemException)
+            3: Errors.EDAMSystemException systemException),
+
+  /**
+   * Identify related entities on the service, such as notes,
+   * notebooks, and tags related to notes or content.
+   *
+   * @param query
+   *   The information about which we are finding related entities.
+
+   * @param resultSpec
+   *   Allows the client to indicate the type and quantity of
+   *   information to be returned, allowing a saving of time and
+   *   bandwidth.
+   *
+   * @return
+   *   The result of the query, with information considered
+   *   to likely be relevantly related to the information
+   *   described by the query.
+   *
+   * @throws EDAMUserException <ul>
+   *   <li>BAD_DATA_FORMAT "RelatedQuery.plainText" - If you provided a
+   *     a zero-length plain text value.
+   *   </li>
+   *   <li>BAD_DATA_FORMAT "RelatedQuery.noteGuid" - If you provided an
+   *     invalid Note GUID, that is, one that does not match the constraints
+   *     defined by EDAM_GUID_LEN_MIN, EDAM_GUID_LEN_MAX, EDAM_GUID_REGEX.
+   *   </li>                                                                          
+   *   <li>PERMISSION_DENIED "Note" - If the caller does not have access to
+   *     the note identified by RelatedQuery.noteGuid.
+   *   </li>                                                      
+   *   <li>DATA_REQUIRED "RelatedResultSpec" - If you did not not set any values
+   *     in the result spec.
+   *   </li>
+   * </ul>
+   * 
+   * @throws EDAMNotFoundException <ul>
+   *   <li>"RelatedQuery.noteGuid" - the note with that GUID is not
+   *     found, if that field has been set in the query.
+   *   </li>
+   * </ul>
+   */
+  RelatedResult findRelated(1: string authenticationToken,
+                            2: RelatedQuery query,
+                            3: RelatedResultSpec resultSpec)
+    throws (1: Errors.EDAMUserException userException,
+            2: Errors.EDAMSystemException systemException,
+            3: Errors.EDAMNotFoundException notFoundException)
 }
