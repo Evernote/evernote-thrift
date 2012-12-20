@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2012 Evernote Corporation
+ * Copyright 2007-2012 Evernote Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -107,6 +107,12 @@ const string EDAM_EMAIL_DOMAIN_REGEX =
  */
 const string EDAM_EMAIL_REGEX =
   "^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(\\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.([A-Za-z]{2,})$";
+  
+/**
+ * A regular expression that must match any VAT ID given to Evernote.
+ */
+const string EDAM_VAT_REGEX =
+  "[A-Za-z]{2}.+";
 
 /**
  * The minimum length of a timezone specification string
@@ -153,6 +159,10 @@ const string EDAM_MIME_TYPE_WAV = "audio/wav";
 const string EDAM_MIME_TYPE_MP3 = "audio/mpeg";
 /** Canonical MIME type string for AMR audio resources */
 const string EDAM_MIME_TYPE_AMR = "audio/amr";
+/** Canonical MIME type string for AAC audio resources */
+const string EDAM_MIME_TYPE_AAC = "audio/aac";
+/** Canonical MIME type string for MP4 audio resources */
+const string EDAM_MIME_TYPE_M4A = "audio/mp4";
 /** Canonical MIME type string for MP4 video resources */
 const string EDAM_MIME_TYPE_MP4_VIDEO = "video/mp4";
 /** Canonical MIME type string for Evernote Ink resources */
@@ -163,8 +173,8 @@ const string EDAM_MIME_TYPE_PDF = "application/pdf";
 const string EDAM_MIME_TYPE_DEFAULT = "application/octet-stream";
 
 /**
- * The set of resource MIME types that are expected to be handled
- * correctly by all of the major Evernote client applications.
+ * The set of resource MIME types that are expected to be handled 
+ * correctly by all of the major Evernote client applications. 
  */
 const set<string> EDAM_MIME_TYPES = [
   EDAM_MIME_TYPE_GIF,
@@ -175,20 +185,10 @@ const set<string> EDAM_MIME_TYPES = [
   EDAM_MIME_TYPE_AMR,
   EDAM_MIME_TYPE_INK,
   EDAM_MIME_TYPE_PDF,
-  EDAM_MIME_TYPE_MP4_VIDEO
+  EDAM_MIME_TYPE_MP4_VIDEO,
+  EDAM_MIME_TYPE_AAC,
+  EDAM_MIME_TYPE_M4A
 ];
-
-/**
- * Commerce Services used
- */
-const string EDAM_COMMERCE_SERVICE_GOOGLE = "Google";
-const string EDAM_COMMERCE_SERVICE_PAYPAL = "Paypal";
-const string EDAM_COMMERCE_SERVICE_GIFT   = "Gift";
-const string EDAM_COMMERCE_SERVICE_TRIALPAY   = "TrialPay";
-const string EDAM_COMMERCE_SERVICE_TRIAL = "Trial";
-const string EDAM_COMMERCE_SERVICE_GROUP = "Group";
-const string EDAM_COMMERCE_SERVICE_CYBERSOURCE = "CYBERSRC";
-const string EDAM_COMMERCE_DEFAULT_CURRENCY_COUNTRY_CODE = "USD";
 
 /**
  * The minimum length of a user search query string in Unicode chars
@@ -427,6 +427,10 @@ const i32    EDAM_USER_PASSWORD_LEN_MAX = 64;
 const string EDAM_USER_PASSWORD_REGEX =
   "^[A-Za-z0-9!#$%&'()*+,./:;<=>?@^_`{|}~\\[\\]\\\\-]{6,64}$";
 
+/**
+ * The maximum length of an Evernote Business URI
+ */
+const i32    EDAM_BUSINESS_URI_LEN_MAX = 32;
 
 // ==================== data model collection limits ===========================
 
@@ -446,6 +450,11 @@ const i32    EDAM_NOTE_RESOURCES_MAX = 1000;
 const i32    EDAM_USER_TAGS_MAX = 100000;
 
 /**
+ * Maximum number of Tags per business account.
+ */
+const i32    EDAM_BUSINESS_TAGS_MAX = 100000;
+
+/**
  * Maximum number of SavedSearches per account
  */
 const i32    EDAM_USER_SAVED_SEARCHES_MAX = 100;
@@ -456,9 +465,19 @@ const i32    EDAM_USER_SAVED_SEARCHES_MAX = 100;
 const i32    EDAM_USER_NOTES_MAX = 100000;
 
 /**
+ * Maximum number of Notes per business account
+ */
+const i32    EDAM_BUSINESS_NOTES_MAX = 500000;
+
+/**
  * Maximum number of Notebooks per user
  */
 const i32    EDAM_USER_NOTEBOOKS_MAX = 250;
+
+/**
+ * Maximum number of Notebooks in a business account
+ */
+const i32    EDAM_BUSINESS_NOTEBOOKS_MAX = 5000;
 
 /**
  * Maximum number of recent email addresses that are maintained
@@ -493,6 +512,12 @@ const i64    EDAM_USER_UPLOAD_LIMIT_FREE = 62914560;
 const i64    EDAM_USER_UPLOAD_LIMIT_PREMIUM = 1073741824;
 
 /**
+ * The number of bytes of new data that may be uploaded to a business
+ * account each month.
+ */
+const i64    EDAM_USER_UPLOAD_LIMIT_BUSINESS = 1073741824;
+
+/**
  * Maximum total size of a Note that can be added to a Free account.
  * The size of a note is calculated as:
  * ENML content length (in Unicode characters) plus the sum of all resource
@@ -506,7 +531,7 @@ const i32    EDAM_NOTE_SIZE_MAX_FREE = 26214400;
  * ENML content length (in Unicode characters) plus the sum of all resource
  * sizes (in bytes).
  */
-const i32    EDAM_NOTE_SIZE_MAX_PREMIUM = 52428800;
+const i32    EDAM_NOTE_SIZE_MAX_PREMIUM = 104857600;
 
 /**
  * Maximum size of a resource, in bytes, for Free accounts
@@ -516,7 +541,7 @@ const i32    EDAM_RESOURCE_SIZE_MAX_FREE = 26214400;
 /**
  * Maximum size of a resource, in bytes, for Premium accounts
  */
-const i32    EDAM_RESOURCE_SIZE_MAX_PREMIUM = 52428800;
+const i32    EDAM_RESOURCE_SIZE_MAX_PREMIUM = 104857600;
 
 /**
  * Maximum number of linked notebooks per account
@@ -582,9 +607,14 @@ const string EDAM_CONTENT_CLASS_HELLO_PROFILE = "evernote.hello.profile";
 const string EDAM_CONTENT_CLASS_FOOD_MEAL = "evernote.food.meal";
 
 /**
- * The content class value used for notes created by Skitch.
+ * The content class value used for notes created by Evernote Skitch.
  */
 const string EDAM_CONTENT_CLASS_SKITCH = "evernote.skitch";
+
+/**
+ * The content class value used for notes created by Evernote Penultimate.
+ */
+const string EDAM_CONTENT_CLASS_PENULTIMATE = "evernote.penultimate";
 
 /**
  * The minimum length of the plain text in a findRelated query, assuming that
@@ -614,3 +644,71 @@ const i32 EDAM_RELATED_MAX_NOTEBOOKS = 1;
  * The maximum number of tags that will be returned from a findRelated() query.
  */
 const i32 EDAM_RELATED_MAX_TAGS = 25;
+
+/**
+ * The minimum length, in Unicode characters, of a description for a business
+ * notebook.
+ */
+const i32 EDAM_BUSINESS_NOTEBOOK_DESCRIPTION_LEN_MIN = 1;
+
+/**
+ * The maximum length, in Unicode characters, of a description for a business
+ * notebook.
+ */
+const i32 EDAM_BUSINESS_NOTEBOOK_DESCRIPTION_LEN_MAX = 200;
+/**
+ * All business notebook descriptions must match this pattern.
+ * This excludes control chars or line/paragraph separators.
+ * The string may not begin or end with whitespace.
+ */
+const string EDAM_BUSINESS_NOTEBOOK_DESCRIPTION_REGEX =
+  "^[^\\p{Cc}\\p{Z}]([^\\p{Cc}\\p{Zl}\\p{Zp}]{0,198}[^\\p{Cc}\\p{Z}])?$";
+
+/**
+ * Minimum length of a preference name
+ */
+const i32 EDAM_PREFERENCE_NAME_LEN_MIN = 3;
+/**
+ * Maximum length of a preference name
+ */
+const i32 EDAM_PREFERENCE_NAME_LEN_MAX = 32;
+/**
+ * Minimum length of a preference value
+ */
+const i32 EDAM_PREFERENCE_VALUE_LEN_MIN = 1;
+/**
+ * Maximum length of a preference value
+ */
+const i32 EDAM_PREFERENCE_VALUE_LEN_MAX = 1024;
+/**
+ * Maximum number of name/value pairs allowed
+ */
+const i32 EDAM_MAX_PREFERENCES = 100;
+/**
+ * Maximum number of values per preference name
+ */
+const i32 EDAM_MAX_VALUES_PER_PREFERENCE = 250;
+/**
+ * A preference name must match this regex.
+ */
+const string EDAM_PREFERENCE_NAME_REGEX = "^[A-Za-z0-9_.-]{3,32}$";
+/**
+ * A preference value must match this regex.
+ */
+const string EDAM_PREFERENCE_VALUE_REGEX = "^[^\\p{Cc}]{1,1024}$";
+/**
+ * Maximum length of the device identifier string associated with long sessions.
+ */
+const i32 EDAM_DEVICE_ID_LEN_MAX = 32;
+/**
+ * Regular expression for device identifier strings associated with long sessions.
+ */
+const string EDAM_DEVICE_ID_REGEX = "^[^\\p{Cc}]{1,32}$";
+/**
+ * Maximum length of the device description string associated with long sessions.
+ */
+const i32 EDAM_DEVICE_DESCRIPTION_LEN_MAX = 64;
+/**
+ * Regular expression for device description strings associated with long sessions.
+ */
+const string EDAM_DEVICE_DESCRIPTION_REGEX = "^[^\\p{Cc}]{1,64}$";

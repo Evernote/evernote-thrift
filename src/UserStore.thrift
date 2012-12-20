@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2012 Evernote Corporation
+ * Copyright 2007-2012 Evernote Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -54,17 +54,9 @@ const i16 EDAM_VERSION_MAJOR = 1
  * Clients pass this to the service using UserStore.checkVersion at the
  * beginning of a session to confirm that they are not out of date.
  */
-const i16 EDAM_VERSION_MINOR = 22
+const i16 EDAM_VERSION_MINOR = 23
 
 //============================= Enumerations ==================================
-/**
- * Enumeration of Sponsored Group Roles
- */
-enum SponsoredGroupRole {
-  GROUP_MEMBER = 1,
-  GROUP_ADMIN = 2,
-  GROUP_OWNER = 3
-}
 
 /**
  * This structure is used to provide publicly-available user information
@@ -76,9 +68,7 @@ enum SponsoredGroupRole {
  *   </dd>
  * <dt>shardId:</dt>
  *   <dd>
- *   The name of the virtual server that manages the state of
- *   this user. This value is used internally to determine which system should
- *   service requests about this user's data.
+ *   DEPRECATED - Client applications should have no need to use this field.
  *   </dd>
  * <dt>privilege:</dt>
  *   <dd>
@@ -92,6 +82,16 @@ enum SponsoredGroupRole {
  *   I.e. this is the URL that should be used to create the Thrift HTTP client
  *   transport to send messages to the NoteStore service for the account.
  *   </dd>
+ * <dt>webApiUrlPrefix:</dt>
+ *   <dd>
+ *   This field will contain the initial part of the URLs that should be used
+ *   to make requests to Evernote's thin client "web API", which provide
+ *   optimized operations for clients that aren't capable of manipulating
+ *   the full contents of accounts via the full Thrift data model. Clients
+ *   should concatenate the relative path for the various servlets onto the
+ *   end of this string to construct the full URL, as documented on our
+ *   developer web site.
+ *   </dd>
  * </dl>
  */
 struct PublicUserInfo {
@@ -99,78 +99,9 @@ struct PublicUserInfo {
   2:  required  string shardId,
   3:  optional  Types.PrivilegeLevel privilege,
   4:  optional  string username,
-  5:  optional  string noteStoreUrl
+  5:  optional  string noteStoreUrl,
+  6:  optional  string webApiUrlPrefix
 }
-
-/**
- * This structure is used to provide information about a user's Premium account.
- *<dl>
- * <dt>currentTime:</dt>
- *   <dd>
- *   The server-side date and time when this data was generated.
- *   </dd>
- * <dt>premium:</dt>
- *   <dd>
- *	 True if the user's account is Premium.
- *   </dd>
- * <dt>premiumRecurring</dt>
- *   <dd>
- *   True if the user's account is Premium and has a recurring payment method.
- *   </dd>
- * <dt>premiumExpirationDate:</dt>
- *   <dd>
- *   The date when the user's Premium account expires, or the date when the
- *   user's account will be charged if it has a recurring payment method.
- *   </dd>
- * <dt>premiumExtendable:</dt>
- *   <dd>
- *   True if the user is eligible for purchasing Premium account extensions.
- *   </dd>
- * <dt>premiumPending:</dt>
- *   <dd>
- *   True if the user's Premium account is pending payment confirmation
- *   </dd>
- * <dt>premiumCancellationPending:</dt>
- *   <dd>
- *   True if the user has requested that no further charges to be made; the
- *   Premium account will remain active until it expires.
- *   </dd>
- * <dt>canPurchaseUploadAllowance:</dt>
- *   <dd>
- *   True if the user is eligible for purchasing additional upload allowance.
- *   </dd>
- * <dt>sponsoredGroupName:</dt>
- *   <dd>
- *   The name of the sponsored group that the user is part of.
- *   </dd>
- * <dt>sponsoredGroupRole:</dt>
- *   <dd>
- *   The role of the user within a sponsored group.
- *   </dd>
- * <dt>businessName:</dt>
- *   <dd>
- *   The name of the business that the user is associated with.
- *   </dd>
- * <dt>businessAdmin:</dt>
- *   <dd>
- *   True if the user is the administrator of the business.
- *   </dd>
- * </dl>
- */
-struct PremiumInfo {
-  1:  required Types.Timestamp currentTime,
-  2:  required bool premium,
-  3:  required bool premiumRecurring,
-  4:  optional Types.Timestamp premiumExpirationDate,
-  5:  required bool premiumExtendable,
-  6:  required bool premiumPending,
-  7:  required bool premiumCancellationPending,
-  8:  required bool canPurchaseUploadAllowance,
-  9:  optional string sponsoredGroupName,
-  10: optional SponsoredGroupRole sponsoredGroupRole
-  11: optional string businessName,
-  12: optional bool businessAdmin
- }
 
 /**
  * When an authentication (or re-authentication) is performed, this structure
@@ -305,7 +236,8 @@ struct BootstrapSettings {
   9: optional bool enableSingleNoteSharing,
   10: optional bool enableSponsoredAccounts,
   11: optional bool enableTwitterSharing,
-  12: optional bool enableLinkedInSharing
+  12: optional bool enableLinkedInSharing,
+  13: optional bool enablePublicNotebooks
 }
 
 /**
@@ -406,10 +338,10 @@ service UserStore {
   BootstrapInfo getBootstrapInfo(1: string locale),
 
   /**
-   * This is used to check a username and password in order to create an
-   * authentication session that could be used for further actions.
+   * This is used to check a username and password in order to create a
+   * short-lived authentication session that can be used for further actions.
    *
-   * This function is only availabe to Evernote's internal applications.
+   * This function is only available to Evernote's internal applications.
    * Third party applications must authenticate using OAuth as
    * described at
    * <a href="http://dev.evernote.com/documentation/cloud/">dev.evernote.com</a>.
@@ -425,13 +357,12 @@ service UserStore {
    *   provided over a protected transport (e.g. SSL).
    *
    * @param consumerKey
-   *   A unique identifier for this client application, provided by Evernote
-   *   to developers who request an API key.  This must be provided to identify
-   *   the client.
+   *   The "consumer key" portion of the API key issued to the client application
+   *   by Evernote.
    *
    * @param consumerSecret
-   *   If the client was given a "consumer secret" when the API key was issued,
-   *   it must be provided here to authenticate the application itself.
+   *   The "consumer secret" portion of the API key issued to the client application
+   *   by Evernote.
    *
    * @return
    *   The result of the authentication.  If the authentication was successful,
@@ -459,6 +390,124 @@ service UserStore {
             2: Errors.EDAMSystemException systemException),
 
   /**
+   * This is used to check a username and password in order to create a
+   * long-lived authentication token that can be used for further actions.
+   *
+   * This function is not available to most third party applications,
+   * which typically authenticate using OAuth as
+   * described at
+   * <a href="http://dev.evernote.com/documentation/cloud/">dev.evernote.com</a>.
+   * If you believe that your application requires permission to authenticate
+   * using username and password instead of OAuth, please contact Evernote
+   * developer support by visiting 
+   * <a href="http://dev.evernote.com">dev.evernote.com</a>.
+   *
+   * @param username
+   *   The username or registered email address of the account to
+   *   authenticate against.
+   *
+   * @param password
+   *   The plaintext password to check against the account.  Since
+   *   this is not protected by the EDAM protocol, this information must be
+   *   provided over a protected transport (i.e. SSL).
+   *
+   * @param consumerKey
+   *   The "consumer key" portion of the API key issued to the client application
+   *   by Evernote.
+   *
+   * @param consumerSecret
+   *   The "consumer secret" portion of the API key issued to the client application
+   *   by Evernote.
+   *
+   * @param deviceIdentifier
+   *   An optional string, no more than 32 characters in length, that uniquely identifies 
+   *   the device from which the authentication is being performed. This string allows 
+   *   the service to return the same authentication token when a given application 
+   *   requests authentication repeatedly from the same device. This may happen when the 
+   *   user logs out of an application and then logs back in, or when the application is 
+   *   uninstalled and later reinstalled. If no reliable device identifier can be created, 
+   *   this value should be omitted. If set, the device identifier must be between
+   *   1 and EDAM_DEVICE_ID_LEN_MAX characters long and must match the regular expression
+   *   EDAM_DEVICE_ID_REGEX.
+   *
+   * @param deviceDescription
+   *   A description of the device from which the authentication is being performed.
+   *   This field is displayed to the user in a list of authorized applications to
+   *   allow them to distinguish between multiple tokens issued to the same client
+   *   application on different devices. For example, the Evernote iOS client on
+   *   a user's iPhone and iPad might pass the iOS device names "Bob's iPhone" and
+   *   "Bob's iPad". The device description must be between 1 and 
+   *   EDAM_DEVICE_DESCRIPTION_LEN_MAX characters long and must match the regular 
+   *   expression EDAM_DEVICE_DESCRIPTION_REGEX.
+   *
+   * @return
+   *   The result of the authentication. The level of detail provided in the returned
+   *   AuthenticationResult.User structure depends on the access level granted by 
+   *   calling application's API key.
+   *
+   * @throws EDAMUserException <ul>
+   *   <li> DATA_REQUIRED "username" - username is empty
+   *   <li> DATA_REQUIRED "password" - password is empty
+   *   <li> DATA_REQUIRED "consumerKey" - consumerKey is empty
+   *   <li> DATA_REQUIRED "consumerSecret" - consumerSecret is empty
+   *   <li> DATA_REQUIRED "deviceDescription" - deviceDescription is empty
+   *   <li> BAD_DATA_FORMAT "deviceDescription" - deviceDescription is not valid.
+   *   <li> BAD_DATA_FORMAT "deviceIdentifier" - deviceIdentifier is not valid.
+   *   <li> INVALID_AUTH "username" - username not found
+   *   <li> INVALID_AUTH "password" - password did not match
+   *   <li> INVALID_AUTH "consumerKey" - consumerKey is not authorized
+   *   <li> INVALID_AUTH "consumerSecret" - consumerSecret is incorrect
+   *   <li> PERMISSION_DENIED "User.active" - user account is closed
+   *   <li> PERMISSION_DENIED "User.tooManyFailuresTryAgainLater" - user has
+   *     failed authentication too often
+   * </ul>
+   */
+  AuthenticationResult authenticateLongSession(1: string username,
+                                               2: string password,
+                                               3: string consumerKey,
+                                               4: string consumerSecret,
+                                               5: string deviceIdentifier,
+                                               6: string deviceDescription)
+    throws (1: Errors.EDAMUserException userException,
+            2: Errors.EDAMSystemException systemException),
+
+
+  /**
+   * This is used to take an existing authentication token that grants access
+   * to an individual user account (returned from 'authenticate', 
+   * 'authenticateLongSession' or an OAuth authorization) and obtain an additional 
+   * authentication token that may be used to access business notebooks if the user
+   * is a member of an Evernote Business account.
+   *
+   * The resulting authentication token may be used to make NoteStore API calls
+   * against the business using the NoteStore URL returned in the result.
+   *
+   * @param authenticationToken 
+   *   The authentication token for the user. This may not be a shared authentication
+   *   token (returned by NoteStore.authenticateToSharedNotebook or 
+   *   NoteStore.authenticateToSharedNote) or a business authentication token.
+   * 
+   * @return
+   *   The result of the authentication, with the token granting access to the
+   *   business in the result's 'authenticationToken' field. The URL that must
+   *   be used to access the business account NoteStore will be returned in the
+   *   result's 'noteStoreUrl' field.  The 'User' field will
+   *   not be set in the result.
+   *
+   * @throws EDAMUserException <ul>
+   *   <li> PERMISSION_DENIED "authenticationToken" - the provided authentication token
+   *        is a shared or business authentication token. </li>
+   *   <li> PERMISSION_DENIED "Business" - the user identified by the provided 
+   *        authentication token is not currently a member of a business. </li>
+   *   <li> PERMISSION_DENIED "Business.status" - the business that the user is a 
+   *        member of is not currently in an active status. </li>
+   * </ul>
+   */
+  AuthenticationResult authenticateToBusiness(1: string authenticationToken)
+    throws (1: Errors.EDAMUserException userException,
+            2: Errors.EDAMSystemException systemException),
+
+  /**
    * This is used to take an existing authentication token (returned from
    * 'authenticate') and exchange it for a newer token which will not expire
    * as soon.  This must be invoked before the previous token expires.
@@ -470,8 +519,8 @@ service UserStore {
    *
    * @return
    *   The result of the authentication, with the new token in
-   *   the result's "authentication" field.  The User field will
-   *   not be set in the reply.
+   *   the result's 'authenticationToken' field.  The 'User' field will
+   *   not be set in the result.
    */
   AuthenticationResult refreshAuthentication(1: string authenticationToken)
     throws (1: Errors.EDAMUserException userException,
@@ -506,7 +555,7 @@ service UserStore {
    * provided authentication token, or throws an exception if this token is not
    * valid.
    */
-  PremiumInfo getPremiumInfo(1: string authenticationToken)
+  Types.PremiumInfo getPremiumInfo(1: string authenticationToken)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMSystemException systemException)
 

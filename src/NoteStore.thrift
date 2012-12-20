@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2012 Evernote Corporation
+ * Copyright 2007-2012 Evernote Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -89,7 +89,6 @@ struct SyncState {
   3:  required  i32 updateCount,
   4:  optional  i64 uploaded
 }
-
 
 /**
  * This structure is given out by the NoteStore when a client asks to
@@ -212,7 +211,7 @@ struct SyncChunk {
   11: optional  list<Types.Guid> expungedTags,
   12: optional  list<Types.Guid> expungedSearches,
   13: optional  list<Types.LinkedNotebook> linkedNotebooks,
-  14: optional  list<Types.Guid> expungedLinkedNotebooks
+  14: optional  list<Types.Guid> expungedLinkedNotebooks,
 }
 
 /**
@@ -307,7 +306,6 @@ struct SyncChunk {
  *   The value can be a literal match or, if the last character is an
  *   asterisk, a prefix match.
  *   </dd>
- *
  * </dl>
  */
 struct SyncChunkFilter {
@@ -380,6 +378,14 @@ struct SyncChunkFilter {
  *   the Trash) will be returned. Otherwise, only active notes will be returned.
  *   There is no way to find both active and inactive notes in a single query.
  *   </dd>
+ *
+ * <dt>emphasized</dt>
+ *   <dd>
+ *   If present, a search query string that may or may not influence the notes
+ *   to be returned, both in terms of coverage as well as of order. Think of it
+ *   as a wish list, not a requirement.
+ *   Accepts the full search grammar documented in the Evernote API Overview.
+ *   </dd>
  * </dl>
  */
 struct NoteFilter {
@@ -390,7 +396,8 @@ struct NoteFilter {
   4: optional  Types.Guid notebookGuid,
   5: optional  list<Types.Guid> tagGuids,
   6: optional  string timeZone,
-  7: optional  bool inactive
+  7: optional  bool inactive,
+  8: optional  string emphasized
 }
 
 
@@ -612,77 +619,6 @@ struct NoteCollectionCounts {
 }
 
 /**
- * Information for tracking the display of a particular ad by a client.
- *
- * <dl>
- *  <dt>adId</dt>
- *    <dd>
- *      The identifier for this ad, from a previous Ad.id given to the client
- *    </dd>
- *
- *  <dt>impressionCount</dt>
- *    <dd>
- *      The number of times this ad was displayed since the last successful
- *      ad retrieval.  The client should only report times the ad was selected
- *      when the client was visible.
- *    </dd>
- *
- *  <dt>impressionTime</dt>
- *    <dd>
- *      The number of seconds that the client displayed the advertisement since
- *      the last successful ad retrieval.  This corresponds to the seconds that
- *      the client application was visible.
- *    </dd>
- * </dl>
- */
-struct AdImpressions {
-  1:  required  i32 adId,
-  2:  required  i32 impressionCount,
-  3:  required  i32 impressionTime
-}
-
-/**
- * Parameters that will be given by a client to the service when it requests
- * a set of advertisements to display.  If any of these values are omitted,
- * the service will use default values.
- *
- * <dl>
- *  <dt>clientLanguage</dt>
- *    <dd>
- *      The ISO 639-1 language code for the primary language for the client.
- *      If omitted, English will be assumed ('en').
- *    </dd>
- *
- *  <dt>impressions</dt>
- *    <dd>
- *      A list of the impression counts and total display time for the ads
- *      that were displayed in the last day.
- *    </dd>
- *
- *  <dt>supportHtml</dt>
- *    <dd>
- *      If true, the client requesting the ads supports ads specified via
- *      general HTML (with rich media, Javascript, etc.).
- *    </dd>
- *
- *  <dt>clientProperties</dt>
- *    <dd>
- *      If provided, this may contain a set of key/value pairs that identify
- *      the characteristics of a particular client that may be used to help
- *      determine appropriate ads for that client.  These tuples may be used
- *      either to reduce or increase the likelihood that each ad will be
- *      returned.
- *    </dd>
- * </dl>
- */
-struct AdParameters {
-  2:  optional  string  clientLanguage,
-  4:  optional  list<AdImpressions>  impressions,
-  5:  optional  bool supportHtml,
-  6:  optional  map<string, string> clientProperties
-}
-
-/**
  * Parameters that must be given to the NoteStore emailNote call. These allow
  * the caller to specify the note to send, the recipient addresses, etc.
  *
@@ -807,7 +743,10 @@ struct ClientUsageMetrics {
 
 /**
  * A description of the thing for which we are searching for related
- * entities.  You must choose exactly one field.
+ * entities.
+ *
+ * You must specify either <em>noteGuid</em> or <em>plainText</em>, but
+ * not both. <em>filter</em> is optional.
  *
  * <dl>
  * <dt>noteGuid</dt>
@@ -819,11 +758,19 @@ struct ClientUsageMetrics {
  *     You should provide a text block with a number of characters between
  *     EDAM_RELATED_PLAINTEXT_LEN_MIN and EDAM_RELATED_PLAINTEXT_LEN_MAX.
  *     </dd>
+ *
+ * <dt>filter</dt>
+ * <dd>The list of criteria that will constrain the notes being considered
+ *     related.
+ *     Please note that some of the parameters may be ignored, such as
+ *     <em>order</em> and <em>ascending</em>.
+ * </dd>
  * </dl>
  */
 struct RelatedQuery {
   1: optional string noteGuid,
-  2: optional string plainText
+  2: optional string plainText,
+  3: optional NoteFilter filter
 }
 
 /**
@@ -846,18 +793,35 @@ struct RelatedQuery {
  * <dd>If tags have been requested to be included, this will be the list
  *     of tags.</dd>
  * </dl>
+ *
+ * <dt>containingNotebooks</dt>
+ * <dd>If <code>includeContainingNotebooks</code> is set to <code>true</code>
+ *     in the RelatedResultSpec, return the list of notebooks to
+ *     to which the returned related notes belong. The notebooks in this
+ *     list will occur once per notebook GUID and are represented as
+ *     NotebookDescriptor objects.</dd>
+ * </dl>
+ *
+ * <dt>debugInfo</dt>
+ * <dd>NOTE: This should be excluded from the public API.<br /><br />
+ *     If <code>includeDebugInfo</code> in RelatedResultSpec is set to
+ *     <code>true</code>, this field may contain debug information
+ *     if the service decides to do so.</dd>
+ * </dl>
  */
 struct RelatedResult {
   1: optional list<Types.Note> notes,
   2: optional list<Types.Notebook> notebooks,
-  3: optional list<Types.Tag> tags
+  3: optional list<Types.Tag> tags,
+  4: optional list<Types.NotebookDescriptor> containingNotebooks,
+  5: optional string debugInfo
 }
 
 /**
  * A description of the thing for which the service will find related
  * entities, via findRelated(), together with a description of what
  * type of entities and how many you are seeking in the
- * RelatednessResult.
+ * RelatedResult.
  *
  * <dl>
  * <dt>maxNotes</dt>
@@ -878,11 +842,33 @@ struct RelatedResult {
  *     will be silently capped.  If you do not set this field, then
  *     no tags will be returned.</dd>
  * </dl>
+ *
+ * <dt>writableNotebooksOnly</dt>
+ * <dd>Require that all returned related notebooks are writable.
+ *     The user will be able to create notes in all returned notebooks.
+ *     However, individual notes returned may still belong to notebooks
+ *     in which the user lacks the ability to create notes.</dd>
+ * </dl>
+ *
+ * <dt>includeContainingNotebooks</dt>
+ * <dd>If set to <code>true</code>, return the containingNotebooks field
+ *     in the RelatedResult, which will contain the list of notebooks to
+ *     to which the returned related notes belong.</dd>
+ * </dl>
+ *
+ * <dt>includeDebugInfo</dt>
+ * <dd>NOTE: This should be excluded from the public API.<br /><br />
+ *     If set to <code>true</code>, indicate that debug information should
+ *     be returned in the 'debugInfo' field of RelatedResult.</dd>
+ * </dl>
  */
 struct RelatedResultSpec {
   1: optional i32 maxNotes,
   2: optional i32 maxNotebooks,
-  3: optional i32 maxTags
+  3: optional i32 maxTags,
+  4: optional bool writableNotebooksOnly,
+  5: optional bool includeContainingNotebooks,
+  6: optional bool includeDebugInfo
 }
 
 /**
@@ -1778,8 +1764,8 @@ service NoteStore {
    * </ul>
    */
   NoteCollectionCounts findNoteCounts(1: string authenticationToken,
-  	                                  2: NoteFilter filter,
-  	                                  3: bool withTrash)
+                                      2: NoteFilter filter,
+                                      3: bool withTrash)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMSystemException systemException,
             3: Errors.EDAMNotFoundException notFoundException),
@@ -2348,7 +2334,7 @@ service NoteStore {
    * This call is only available for notes in Premium accounts.  (I.e. access
    * to past versions of Notes is a Premium-only feature.)
    *
-   * @param guid
+   * @param noteGuid
    *   The GUID of the note to be retrieved.
    *
    * @param updateSequenceNum
@@ -2587,7 +2573,10 @@ service NoteStore {
    *   The GUID of the note that holds the resource to be retrieved.
    *
    * @param contentHash
-   *   The MD5 checksum of the resource within that note.
+   *   The MD5 checksum of the resource within that note. Note that 
+   *   this is the binary checksum, for example from Resource.data.bodyHash,
+   *   and not the hex-encoded checksum that is used within an en-media
+   *   tag in a note body.
    *
    * @param withData
    *   If true, the Resource will include the binary contents of the
@@ -2653,7 +2642,7 @@ service NoteStore {
    */
   binary getResourceRecognition(1: string authenticationToken,
                                 2: Types.Guid guid)
-  	throws (1: Errors.EDAMUserException userException,
+    throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMSystemException systemException,
             3: Errors.EDAMNotFoundException notFoundException),
 
@@ -2709,58 +2698,24 @@ service NoteStore {
    */
   Types.ResourceAttributes getResourceAttributes(1: string authenticationToken,
                                                  2: Types.Guid guid)
-  	throws (1: Errors.EDAMUserException userException,
+    throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMSystemException systemException,
             3: Errors.EDAMNotFoundException notFoundException),
 
   /**
-   * @deprecated -
-   *   This function is deprecated, and should no longer be used.  This will
-   *   always return a value of '0'.
-   */
-  i64 getAccountSize(1: string authenticationToken)
-  	throws (1: Errors.EDAMUserException userException,
-            2: Errors.EDAMSystemException systemException),
-
-  /**
-   * Clients should make this call once per day to receive a bundle of ads that
-   * will be displayed for the subsequent 24 hour period.
-   * <p/>
-   * NOTE: This function is not available to third party applications.
-   *
-   * @param adParameters
-   *   A set of parameters that help the service determine which ads to return.
-   */
-  list<Types.Ad> getAds(1: string authenticationToken,
-                        2: AdParameters adParameters)
-    throws (1: Errors.EDAMUserException userException,
-            2: Errors.EDAMSystemException systemException),
-
-  /**
-   * A thin client should make this call to retrieve a single random ad for
-   * immediate display.
-   * <p/>
-   * NOTE: This function is not available to third party applications.
-   *
-   * @param adParameters
-   *   A set of parameters to help the service determine which ad to return.
-   *   The 'impression' field should either be absent (if no ads have been
-   *   displayed previously), or else it should contain the identifier for
-   *   the most recently-displayed ad so that the service can give a different
-   *   ad.
-   */
-  Types.Ad getRandomAd(1: string authenticationToken,
-                        2: AdParameters adParameters)
-    throws (1: Errors.EDAMUserException userException,
-            2: Errors.EDAMSystemException systemException),
-
-
-  /**
+   * <p>
    * Looks for a user account with the provided userId on this NoteStore
    * shard and determines whether that account contains a public notebook
    * with the given URI.  If the account is not found, or no public notebook
    * exists with this URI, this will throw an EDAMNotFoundException,
    * otherwise this will return the information for that Notebook.
+   * </p>
+   * <p>
+   * If a notebook is visible on the web with a full URL like
+   * http://www.evernote.com/pub/sethdemo/api
+   * Then 'sethdemo' is the username that can be used to look up the userId,
+   * and 'api' is the publicUri.
+   * </p>
    *
    * @param userId
    *    The numeric identifier for the user who owns the public notebook.
@@ -2769,9 +2724,6 @@ service NoteStore {
    *
    * @param publicUri
    *    The uri string for the public notebook, from Notebook.publishing.uri.
-   *    If a notebook is visible on the web with a full URL like
-   *    http://www.evernote.com/pub/ensupport/faq
-   *    Then 'ensupport' is the username and 'faq' is the uri.
    *
    * @throws EDAMNotFoundException <ul>
    *   <li> "Publishing.uri" - not found, by URI
@@ -2780,7 +2732,7 @@ service NoteStore {
    */
   Types.Notebook getPublicNotebook(1: Types.UserID userId,
                                    2: string publicUri)
-  	throws (1: Errors.EDAMSystemException systemException,
+    throws (1: Errors.EDAMSystemException systemException,
             2: Errors.EDAMNotFoundException notFoundException),
 
 
@@ -2809,6 +2761,41 @@ service NoteStore {
    */
   Types.SharedNotebook createSharedNotebook(1: string authenticationToken,
                                             2: Types.SharedNotebook sharedNotebook)
+    throws (1: Errors.EDAMUserException userException,
+            2: Errors.EDAMNotFoundException notFoundException,
+            3: Errors.EDAMSystemException systemException),
+
+  /**
+   * Update a SharedNotebook object.
+   *
+   * @param authenticationToken
+   *   Must be an authentication token from the owner or a shared notebook
+   *   authentication token with sufficient permissions to change invitations
+   *   for a notebook.
+   *
+   * @param sharedNotebook
+   *  The SharedNotebook object containing the requested changes.
+   *  The "id" of the shared notebook must be set to allow the service
+   *  to identify the SharedNotebook to be updated. In addition, you MUST set
+   *  the email, permission, and allowPreview fields to the desired values.
+   *  All other fields will be ignored if set.
+   *
+   * @return
+   *  The Update Serial Number for this change within the account.
+   *
+   * @throws EDAMUserException <ul>
+   *   <li>UNSUPPORTED_OPERATION "updateSharedNotebook" - if this service instance does not support shared notebooks.</li>
+   *   <li>BAD_DATA_FORMAT "SharedNotebook.email" - if the email was not valid.</li>
+   *   <li>DATA_REQUIRED "SharedNotebook.id" - if the id field was not set.</li>
+   *   <li>DATA_REQUIRED "SharedNotebook.privilege" - if the privilege field was not set.</li>
+   *   <li>DATA_REQUIRED "SharedNotebook.allowPreview" - if the allowPreview field was not set.</li>
+   *   </ul>
+   * @throws EDAMNotFoundException <ul>
+   *   <li>SharedNotebook.id - if no shared notebook with the specified ID was found.
+   *   </ul>
+   */
+  i32  updateSharedNotebook(1: string authenticationToken,
+                            2: Types.SharedNotebook sharedNotebook)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMNotFoundException notFoundException,
             3: Errors.EDAMSystemException systemException),
@@ -3209,15 +3196,21 @@ service NoteStore {
    *   <li>BAD_DATA_FORMAT "RelatedQuery.noteGuid" - If you provided an
    *     invalid Note GUID, that is, one that does not match the constraints
    *     defined by EDAM_GUID_LEN_MIN, EDAM_GUID_LEN_MAX, EDAM_GUID_REGEX.
-   *   </li>                                                                          
+   *   </li>
+   *   <li> BAD_DATA_FORMAT "NoteFilter.notebookGuid" - if malformed
+   *   </li>
+   *   <li> BAD_DATA_FORMAT "NoteFilter.tagGuids" - if any are malformed
+   *   </li>
+   *   <li> BAD_DATA_FORMAT "NoteFilter.words" - if search string too long
+   *   </li>
    *   <li>PERMISSION_DENIED "Note" - If the caller does not have access to
    *     the note identified by RelatedQuery.noteGuid.
-   *   </li>                                                      
+   *   </li>
    *   <li>DATA_REQUIRED "RelatedResultSpec" - If you did not not set any values
    *     in the result spec.
    *   </li>
    * </ul>
-   * 
+   *
    * @throws EDAMNotFoundException <ul>
    *   <li>"RelatedQuery.noteGuid" - the note with that GUID is not
    *     found, if that field has been set in the query.
@@ -3229,5 +3222,6 @@ service NoteStore {
                             3: RelatedResultSpec resultSpec)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMSystemException systemException,
-            3: Errors.EDAMNotFoundException notFoundException)
+            3: Errors.EDAMNotFoundException notFoundException),
+
 }

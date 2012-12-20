@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2012 Evernote Corporation
+ * Copyright 2007-2012 Evernote Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -86,7 +86,6 @@ typedef string Guid
  */
 typedef i64 Timestamp
 
-
 // ============================= Enumerations ==================================
 
 /**
@@ -101,7 +100,6 @@ enum PrivilegeLevel {
   SUPPORT = 8,
   ADMIN = 9
 }
-
 
 /**
  * Every search query is specified as a sequence of characters.
@@ -155,6 +153,109 @@ enum PremiumOrderStatus {
   CANCELLATION_PENDING = 4,
   CANCELED             = 5
 }
+
+/**
+ * Privilege levels for accessing shared notebooks.
+ *
+ * READ_NOTEBOOK: Recipient is able to read the contents of the shared notebook
+ *   but does to have access to information about other recipients of the
+ *   notebook or the activity stream information.
+ *
+ * MODIFY_NOTEBOOK_PLUS_ACTIVITY: Recipient has rights to read and modify the contents
+ *   of the shared notebook, including the right to move notes to the trash and to create
+ *   notes in the notebook.  The recipient can also access information about other
+ *   recipients and the activity stream.
+ *
+ * READ_NOTEBOOK_PLUS_ACTIVITY: Recipient has READ_NOTEBOOK rights and can also
+ *   access information about other recipients and the activity stream.
+ *
+ * GROUP: If the user belongs to a group, such as a Business, that has a defined
+ *   privilege level, use the privilege level of the group as the privilege for
+ *   the individual.
+ *
+ * FULL_ACCESS: Recipient has full rights to the shared notebook and recipient lists,
+ *   including privilege to revoke and create invitations and to change privilege
+ *   levels on invitations for individuals.  This privilege level is primarily intended
+ *   for use by individual shares.
+ *
+ * BUSINESS_FULL_ACCESS: Intended for use with Business Notebooks, a
+ * BUSINESS_FULL_ACCESS level is FULL_ACCESS with the additional rights to
+ * change how the notebook will appear in the business library, including the
+ * rights to publish and unpublish the notebook from the library.
+ */
+enum SharedNotebookPrivilegeLevel {
+  READ_NOTEBOOK                  = 0,
+  MODIFY_NOTEBOOK_PLUS_ACTIVITY  = 1,
+  READ_NOTEBOOK_PLUS_ACTIVITY    = 2,
+  GROUP                          = 3,
+  FULL_ACCESS                    = 4,
+  BUSINESS_FULL_ACCESS           = 5
+}
+
+/**
+ * Enumeration of the roles that a User can have within a sponsored group.
+ *
+ * GROUP_MEMBER: The user is a member of the group with no special privileges.
+ *
+ * GROUP_ADMIN: The user is an administrator within the group.
+ *
+ * GROUP_OWNER: The user is the owner of the group.
+ */
+enum SponsoredGroupRole {
+  GROUP_MEMBER = 1,
+  GROUP_ADMIN = 2,
+  GROUP_OWNER = 3
+}
+
+/**
+ * Enumeration of the roles that a User can have within an Evernote Business account.
+ * 
+ * ADMIN: The user is an administrator of the Evernote Business account.
+ * 
+ * NORMAL: The user is a regular user within the Evernote Business account.
+ */
+enum BusinessUserRole {
+  ADMIN = 1,
+  NORMAL = 2,
+}
+
+/**
+ * An enumeration describing restrictions on the domain of shared notebook
+ * instances that are valid for a given operation, as used, for example, in
+ * NotebookRestrictions.
+ *
+ * ONLY_JOINED_OR_PREVIEW: The domain consists of shared notebooks that
+ *   "belong" to the recipient or still available for preview by any recipient.
+ *   Shared notebooks that the recipient has joined (the username has already been
+ *   assigned to our user) are in the domain.  Additionally, shared notebooks
+ *   that allow preview and have not yet been joined are in the domain.
+ * 
+ * NO_SHARED_NOTEBOOKS: No shared notebooks are applicable to the operation.
+ */
+enum SharedNotebookInstanceRestrictions {
+  ONLY_JOINED_OR_PREVIEW = 1,                           
+  NO_SHARED_NOTEBOOKS    = 2   // most restrictive
+}
+
+// ============================== Constants ===================================
+
+/**
+ * A value for the "recipe" key in the "classifications" map in NoteAttributes
+ * that indicates the user has classified a note as being a non-recipe.
+ */
+const string CLASSIFICATION_RECIPE_USER_NON_RECIPE = "000";
+
+/**
+ * A value for the "recipe" key in the "classifications" map in NoteAttributes
+ * that indicates the user has classified a note as being a recipe.
+ */
+const string CLASSIFICATION_RECIPE_USER_RECIPE = "001";
+
+/**
+ * A value for the "recipe" key in the "classifications" map in NoteAttributes
+ * that indicates the Evernote service has classified a note as being a recipe.
+ */
+const string CLASSIFICATION_RECIPE_SERVICE_RECIPE = "002";
 
 /**
  * Standardized value for the 'source' NoteAttribute for notes that
@@ -379,6 +480,11 @@ struct Data {
  *       account owner's settings page
  *   </dd>
  * </dl>
+ *
+ * <dt>taxExempt</dt>
+ *   <dd>A flag indicating the user's sponsored group is exempt from sale tax
+ *   </dd>
+ * </dl>
  */
 struct UserAttributes {
   1:  optional  string defaultLocationName,
@@ -409,7 +515,8 @@ struct UserAttributes {
   28: optional  string referralProof,
   29: optional  bool educationalDiscount,
   30: optional  string businessAddress,
-  31: optional  bool hideSponsorBilling
+  31: optional  bool hideSponsorBilling,
+  32: optional  bool taxExempt
 }
 
 /**
@@ -488,27 +595,100 @@ struct UserAttributes {
  *   <dd>ISO 4217 currency code</dd>
  * <dt>unitPrice</dt>
  *   <dd>charge in the smallest unit of the currency (e.g. cents for USD)</dd>
+ * <dt>businessId</dt>
+ *   <dd>If set, the ID of the Evernote Business account that the user is a
+ *       member of. If not set, the user is not a member of a business.</dd>
+ * <dt>businessName</dt>
+ *   <dd>The human-readable name of the Evernote Business account that
+ *       the user is a member of.</dd>
+ * <dt>businessRole</dt>
+ *   <dd>If set, the role of the user within the Evernote Business account
+ *       that they are a member of.</dd>
  * </dl>
  */
 struct Accounting {
-  1:  optional  i64        uploadLimit,
-  2:  optional  Timestamp  uploadLimitEnd,
-  3:  optional  i64        uploadLimitNextMonth,
+  1:  optional  i64                uploadLimit,
+  2:  optional  Timestamp          uploadLimitEnd,
+  3:  optional  i64                uploadLimitNextMonth,
   4:  optional  PremiumOrderStatus premiumServiceStatus,
-  5:  optional  string     premiumOrderNumber,
-  6:  optional  string     premiumCommerceService,
-  7:  optional  Timestamp  premiumServiceStart,
-  8:  optional  string     premiumServiceSKU,
-  9:  optional  Timestamp  lastSuccessfulCharge,
-  10: optional  Timestamp  lastFailedCharge,
-  11: optional  string     lastFailedChargeReason,
-  12: optional  Timestamp  nextPaymentDue,
-  13: optional  Timestamp  premiumLockUntil,
-  14: optional  Timestamp  updated,
-  16: optional  string     premiumSubscriptionNumber,
-  17: optional  Timestamp  lastRequestedCharge,
-  18: optional  string     currency,
-  19: optional  i32        unitPrice,
+  5:  optional  string             premiumOrderNumber,
+  6:  optional  string             premiumCommerceService,
+  7:  optional  Timestamp          premiumServiceStart,
+  8:  optional  string             premiumServiceSKU,
+  9:  optional  Timestamp          lastSuccessfulCharge,
+  10: optional  Timestamp          lastFailedCharge,
+  11: optional  string             lastFailedChargeReason,
+  12: optional  Timestamp          nextPaymentDue,
+  13: optional  Timestamp          premiumLockUntil,
+  14: optional  Timestamp          updated,
+  16: optional  string             premiumSubscriptionNumber,
+  17: optional  Timestamp          lastRequestedCharge,
+  18: optional  string             currency,
+  19: optional  i32                unitPrice,
+  20: optional  i32                businessId,
+  21: optional  string             businessName,
+  22: optional  BusinessUserRole   businessRole
+}
+
+
+/**
+ * This structure is used to provide information about a user's Premium account.
+ *<dl>
+ * <dt>currentTime</dt>
+ *   <dd>
+ *   The server-side date and time when this data was generated.
+ *   </dd>
+ * <dt>premium</dt>
+ *   <dd>
+ *   True if the user's account is Premium.
+ *   </dd>
+ * <dt>premiumRecurring</dt>
+ *   <dd>
+ *   True if the user's account is Premium and has a recurring payment method.
+ *   </dd>
+ * <dt>premiumExpirationDate</dt>
+ *   <dd>
+ *   The date when the user's Premium account expires, or the date when the
+ *   user's account will be charged if it has a recurring payment method.
+ *   </dd>
+ * <dt>premiumExtendable</dt>
+ *   <dd>
+ *   True if the user is eligible for purchasing Premium account extensions.
+ *   </dd>
+ * <dt>premiumPending</dt>
+ *   <dd>
+ *   True if the user's Premium account is pending payment confirmation
+ *   </dd>
+ * <dt>premiumCancellationPending</dt>
+ *   <dd>
+ *   True if the user has requested that no further charges to be made; the
+ *   Premium account will remain active until it expires.
+ *   </dd>
+ * <dt>canPurchaseUploadAllowance</dt>
+ *   <dd>
+ *   True if the user is eligible for purchasing additional upload allowance.
+ *   </dd>
+ * <dt>sponsoredGroupName</dt>
+ *   <dd>
+ *   The name of the sponsored group that the user is part of.
+ *   </dd>
+ * <dt>sponsoredGroupRole</dt>
+ *   <dd>
+ *   DEPRECATED - will be removed in a future update.
+ *   </dd>
+ * </dl>
+ */
+struct PremiumInfo {
+  1:  required Timestamp currentTime,
+  2:  required bool premium,
+  3:  required bool premiumRecurring,
+  4:  optional Timestamp premiumExpirationDate,
+  5:  required bool premiumExtendable,
+  6:  required bool premiumPending,
+  7:  required bool premiumCancellationPending,
+  8:  required bool canPurchaseUploadAllowance,
+  9:  optional string sponsoredGroupName,
+  10: optional SponsoredGroupRole sponsoredGroupRole
 }
 
 
@@ -521,9 +701,9 @@ struct Accounting {
  *   </dd>
  *
  * <dt>username</dt>
- *   <dd>The name that the user provides to log in to their
- *   account. In the future, this may be empty for some accounts if their login
- *   process is indirect (e.g. via social networks, etc.).
+ *   <dd>The name that uniquely identifies a single user account. This name
+ *   may be presented by the user, along with their password, to log into
+ *   their account.
  *   May only contain a-z, 0-9, or '-', and may not start or end with the '-'
  *   <br/>
  *   Length:  EDAM_USER_USERNAME_LEN_MIN - EDAM_USER_USERNAME_LEN_MAX
@@ -534,6 +714,8 @@ struct Accounting {
  * <dt>email</dt>
  *   <dd>The email address registered for the user.  Must comply with
  *   RFC 2821 and RFC 2822.<br/>
+ *   For privacy reasons, this field may not be populated when a User
+ *   is retrieved via a call to UserStore.getUser().
  *   Length:  EDAM_EMAIL_LEN_MIN - EDAM_EMAIL_LEN_MAX
  *   <br/>
  *   Regex:  EDAM_EMAIL_REGEX
@@ -554,9 +736,7 @@ struct Accounting {
  * <dt>timezone</dt>
  *   <dd>The zone ID for the user's default location.  If present,
  *   this may be used to localize the display of any timestamp for which no
- *   other timezone is available - for example, an note that arrives via
- *   a micro-browser may not contain enough information to display its
- *   local time, so this default timezone may be assigned to the note.
+ *   other timezone is available.
  *   The format must be encoded as a standard zone ID such as
  *   "America/Los_Angeles" or "GMT+08:00"
  *   <br/>
@@ -591,9 +771,7 @@ struct Accounting {
  *   </dd>
  *
  * <dt>shardId</dt>
- *   <dd>The name of the virtual server that manages the state of
- *   this user.  This value is used internally to determine which system should
- *   service requests about this user's data.
+ *   <dd>DEPRECATED - Client applications should have no need to use this field.
  *   </dd>
  *
  * <dt>attributes</dt>
@@ -603,6 +781,11 @@ struct Accounting {
  *
  * <dt>accounting</dt>
  *   <dd>Bookkeeping information for the user's subscription.
+ *   </dd>
+ *
+ * <dt>premiumInfo</dt>
+ *   <dd>If present, this will contain a set of commerce information
+ *   relating to the user's premium service level.
  *   </dd>
  * </dl>
  */
@@ -619,7 +802,8 @@ struct User {
   13: optional  bool active,
   14: optional  string shardId,
   15: optional  UserAttributes attributes,
-  16: optional  Accounting accounting
+  16: optional  Accounting accounting,
+  17: optional  PremiumInfo premiumInfo
 }
 
 
@@ -680,17 +864,17 @@ struct Tag {
 /**
  * A structure that wraps a map of name/value pairs whose values are not
  * always present in the structure in order to reduce space when obtaining
- * batches of entities that contain the map. 
+ * batches of entities that contain the map.
  *
  * When the server provides the client with a LazyMap, it will fill in either
  * the keysOnly field or the fullMap field, but never both, based on the API
  * and parameters.
  *
  * When a client provides a LazyMap to the server as part of an update to
- * an object, the server will only update the LazyMap if the fullMap field is 
+ * an object, the server will only update the LazyMap if the fullMap field is
  * set. If the fullMap field is not set, the server will not make any changes
  * to the map.
- * 
+ *
  * Check the API documentation of the individual calls involving the LazyMap
  * for full details including the constraints of the names and values of the
  * map.
@@ -770,19 +954,19 @@ struct LazyMap {
  *   </dd>
  *
  * <dt>attachment</dt>
- *   <dd>this will be true if the resource should be displayed as an attachment, 
+ *   <dd>this will be true if the resource should be displayed as an attachment,
  *   or false if the resource should be displayed inline (if possible).
  *   </dd>
  *
  * <dt>applicationData</dt>
  * <dd>Provides a location for applications to store a relatively small
- * (4kb) blob of data associated with a Resource that is not visible to the user 
- * and that is opaque to the Evernote service. A single application may use at most 
+ * (4kb) blob of data associated with a Resource that is not visible to the user
+ * and that is opaque to the Evernote service. A single application may use at most
  * one entry in this map, using its API consumer key as the map key. See the
  * documentation for LazyMap for a description of when the actual map values
  * are returned by the service.
- * <p>To safely add or modify your application's entry in the map, use 
- * NoteStore.setResourceApplicationDataEntry. To safely remove your application's 
+ * <p>To safely add or modify your application's entry in the map, use
+ * NoteStore.setResourceApplicationDataEntry. To safely remove your application's
  * entry from the map, use NoteStore.unsetResourceApplicationDataEntry.</p>
  * Minimum length of a name (key): EDAM_APPLICATIONDATA_NAME_LEN_MIN
  * <br/>
@@ -790,7 +974,7 @@ struct LazyMap {
  * <br/>
  * Syntax regex for name (key): EDAM_APPLICATIONDATA_NAME_REGEX
  * </dd>
- * 
+ *
  * </dl>
  */
 struct ResourceAttributes {
@@ -932,7 +1116,7 @@ struct Resource {
  *
  * <dt>source</dt>
  *   <dd>the method that the note was added to the account, if the
- *   note wasn't directly authored in an Evernote desktop client. 
+ *   note wasn't directly authored in an Evernote desktop client.
  *   <br/>
  *   Length:  EDAM_ATTRIBUTE_LEN_MIN - EDAM_ATTRIBUTE_LEN_MAX
  *   </dd>
@@ -964,8 +1148,8 @@ struct Resource {
  * <dd>Allows the user to assign a human-readable location name associated
  * with a note. Users may assign values like 'Home' and 'Work'. Place
  * names may also be populated with values from geonames database
- * (e.g., a restaurant name). Applications are encouraged to normalize values 
- * so that grouping values by place name provides a useful result. Applications 
+ * (e.g., a restaurant name). Applications are encouraged to normalize values
+ * so that grouping values by place name provides a useful result. Applications
  * MUST NOT automatically add place name values based on geolocation without
  * confirmation from the user; that is, the value in this field should be
  * more useful than a simple automated lookup based on the note's latitude
@@ -976,14 +1160,14 @@ struct Resource {
  * clients that special structured information is represented within
  * the note such that special rules apply when making
  * modifications. If contentClass is set and the client
- * application does not specifically support the specified class, 
+ * application does not specifically support the specified class,
  * the client MUST treat the note as read-only. In this case, the
  * client MAY modify the note's notebook and tags via the
  * Note.notebookGuid and Note.tagGuids fields.
  * <p>Applications should set contentClass only when they are creating notes
  * that contain structured information that needs to be maintained in order
- * for the user to be able to use the note within that application. 
- * Setting contentClass makes a note read-only in other applications, so 
+ * for the user to be able to use the note within that application.
+ * Setting contentClass makes a note read-only in other applications, so
  * there is a trade-off when an application chooses to use contentClass.
  * Applications that set contentClass when creating notes must use a contentClass
  * string of the form <i>CompanyName.ApplicationName</i> to ensure uniqueness.</p>
@@ -995,12 +1179,12 @@ struct Resource {
  * <dt>applicationData</dt>
  * <dd>Provides a location for applications to store a relatively small
  * (4kb) blob of data that is not meant to be visible to the user and
- * that is opaque to the Evernote service. A single application may use at most 
+ * that is opaque to the Evernote service. A single application may use at most
  * one entry in this map, using its API consumer key as the map key. See the
  * documentation for LazyMap for a description of when the actual map values
  * are returned by the service.
- * <p>To safely add or modify your application's entry in the map, use 
- * NoteStore.setNoteApplicationDataEntry. To safely remove your application's 
+ * <p>To safely add or modify your application's entry in the map, use
+ * NoteStore.setNoteApplicationDataEntry. To safely remove your application's
  * entry from the map, use NoteStore.unsetNoteApplicationDataEntry.</p>
  * Minimum length of a name (key): EDAM_APPLICATIONDATA_NAME_LEN_MIN
  * <br/>
@@ -1008,7 +1192,7 @@ struct Resource {
  * <br/>
  * Syntax regex for name (key): EDAM_APPLICATIONDATA_NAME_REGEX
  * </dd>
- * 
+ *
  * <dt>lastEditedBy</dt>
  * <dd>An indication of who made the last change to the note.  If you are
  * accessing the note via a shared notebook to which you have modification
@@ -1019,6 +1203,11 @@ struct Resource {
  * guest who made the last edit.  If you do not have access to this value,
  * it will be left unset.  This field is read-only by clients.  The server
  * will ignore all values set by clients into this field.</dd>
+
+ * <dt>classifications</dt>
+ * <dd>A map of classifications applied to the note by clients or by the
+ * Evernote service. The key is the string name of the classification type,
+ * and the value is a constant that begins with CLASSIFICATION_.</dd>
  *
  * </dl>
  */
@@ -1035,7 +1224,8 @@ struct NoteAttributes {
   21: optional  string placeName,
   22: optional  string contentClass,
   23: optional  LazyMap applicationData,
-  24: optional  string lastEditedBy
+  24: optional  string lastEditedBy,
+  26: optional  map<string, string> classifications
 }
 
 
@@ -1225,6 +1415,7 @@ struct Note {
  *   <br/>
  *   Regex:  EDAM_PUBLISHING_DESCRIPTION_REGEX
  *   </dd>
+ *
  * </dl>
  */
 struct Publishing {
@@ -1232,6 +1423,41 @@ struct Publishing {
   2:  optional  NoteSortOrder order,
   3:  optional  bool ascending,
   4:  optional  string publicDescription
+}
+
+/**
+ * If a Notebook contained in an Evernote Business account has been published
+ * the to business library, the Notebook will have a reference to one of these
+ * structures, which specifies how the Notebook will be represented in the
+ * library.
+ * 
+ * <dl>
+ * <dt>notebookDescription</dt>
+ *   <dd>A short description of the notebook's content that will be displayed
+ *       in the business library user interface. The description may not begin
+ *       or end with whitespace.
+ *   <br/>
+ *   Length: EDAM_BUSINESS_NOTEBOOK_DESCRIPTION_LEN_MIN -
+ *           EDAM_BUSINESS_NOTEBOOK_DESCRIPTION_LEN_MAX
+ *   <br/>
+ *   Regex:  EDAM_BUSINESS_NOTEBOOK_DESCRIPTION_REGEX
+ *   </dd>
+ *
+ * <dt>privilege</dt>
+ *   <dd>The privileges that will be granted to users who join the notebook through
+ *       the business library.
+ *   </dd>
+ *
+ * <dt>recommended</dt>
+ *   <dd>Whether the notebook should be "recommended" when displayed in the business
+ *       library user interface.
+ *   </dd>
+ * </dl>
+ */
+struct BusinessNotebook {
+  1:  optional  string notebookDescription,
+  2:  optional  SharedNotebookPrivilegeLevel privilege,
+  3:  optional  bool recommended
 }
 
 /**
@@ -1283,87 +1509,6 @@ struct SavedSearch {
   5:  optional  i32 updateSequenceNum
 }
 
-
-/**
- * An advertisement that may be displayed within an Evernote client.
- * Advertisements are either a snippet of HTML or else they
- * are an image (of type: JPEG, GIF, PNG) with an associated destination URL.
- *
- * <dl>
- *   <dt>id</dt>
- *   <dd>The unique identifier of this advertisement within Evernote's ad
- *   inventory.
- *   </dd>
- *
- *   <dt>width</dt>
- *   <dd>This ad should be displayed within a rectangle that is this wide,
- *   in pixels.
- *   </dd>
- *
- *   <dt>height</dt>
- *   <dd>This ad should be displayed within a rectangle that is this high,
- *   in pixels.
- *   </dd>
- *
- *   <dt>advertiserName</dt>
- *   <dd>A string containing a readable version of the name of this advertiser.
- *   </dd>
- *
- *   <dt>imageUrl</dt>
- *   <dd>The location of the image to display for this ad.</dd>
- *
- *   <dt>destinationUrl</dt>
- *   <dd>When a user clicks on the ad, this is the destination they should be
- *   sent to in a browser.</dd>
- *
- *   <dt>displaySeconds</dt>
- *   <dd>The number of seconds that the ad should be displayed before it is
- *   replaced with a different ad.</dd>
- *
- *   <dt>score</dt>
- *   <dd>A numeric indicator of the relative value of this ad, which can be
- *   compared against other ads from the same day.
- *   </dd>
- *
- *   <dt>image</dt>
- *   <dd>If present, this is the raw image bits of the image file to display
- *   for the ad.  If not present, the imageUrl should be retrieved directly.
- *   </dd>
- *
- *   <dt>imageMime</dt>
- *   <dd>The MIME type of the 'image' bytes, if those are set.</dd>
- *
- *   <dt>html</dt>
- *   <dd>The exact HTML to display for this ad, to support rich or external
- *   advertisements.</dd>
- *
- *   <dt>displayFrequency</dt>
- *   <dd>If this value is set, this is the relatively frequency that this
- *   ad should be displayed in the daily set of ads, relative to a base
- *   frequency of 1.0.  I.e. an ad with a frequency of 3.0 should be displayed
- *   three times more frequently than an ad with a frequency of 1.0.</dd>
- *
- *   <dt>openInTrunk</dt>
- *   <dd>If true, the ad should be opened in the embedded Trunk window by
- *   clients with Trunk support.</dd>
- * </dl>
- */
-struct Ad {
-  1:  optional  i32 id,
-  2:  optional  i16 width,
-  3:  optional  i16 height,
-  4:  optional  string advertiserName,
-  5:  optional  string imageUrl,
-  6:  optional  string destinationUrl,
-  7:  optional  i16 displaySeconds,
-  8:  optional  double score,
-  9:  optional  binary image,
-  10: optional  string imageMime,
-  11: optional  string html,
-  12: optional  double displayFrequency,
-  13: optional  bool openInTrunk
-}
-
 /**
  * Shared notebooks represent a relationship between a notebook and a single
  * share invitation recipient.
@@ -1382,10 +1527,15 @@ struct Ad {
  * owner to identify who they shared with.</dd>
  *
  * <dt>notebookModifiable</dt>
- * <dd>a flag indicating the share is read/write -otherwise it's read only</dd>
+ * <dd>(DEPRECATED) a flag indicating the share is read/write -otherwise it's read
+ *     only.  This field is deprecated in favor of the new "privilege" field.</dd>
  *
  * <dt>requireLogin</dt>
- * <dd>indicates that a user must login to access the share</dd>
+ * <dd>(DEPRECATED) indicates that a user must login to access the share.  This
+ *     field is deprecated and will be "true" for all new shared notebooks.  It
+ *     is read-only and ignored when creating or modifying a shared notebook,
+ *     except that a shared notebook can be modified to require login.
+ *     See "allowPreview" for information on privileges and shared notebooks.</dd>
  *
  * <dt>serviceCreated</dt>
  * <dd>the date the owner first created the share with the specific email
@@ -1396,10 +1546,23 @@ struct Ad {
  *     will be updated when authenticateToSharedNotebook is called the first
  *     time with a shared notebook requiring login (i.e. when the username is
  *     bound to that shared notebook).</dd>
- * 
+ *
  * <dt>username</dt>
  * <dd>the username of the user who can access this share.
  *   Once it's assigned it cannot be changed.</dd>
+ *
+ * <dt>privilege</dt>
+ * <dd>The privilege level granted to the notebook, activity stream, and
+ *     invitations.  See the corresponding enumeration for details.</dd>
+ *
+ * <dt>allowPreview</dt>
+ * <dd>Whether or not to grant "READ_NOTEBOOK" privilege without an
+ *     authentication token, for authenticateToSharedNotebook(...).  With
+ *     the change to "requireLogin" always being true for new shared
+ *     notebooks, this is the only way to access a shared notebook without
+ *     an authorization token.  This setting expires after the first use
+ *     of authenticateToSharedNotebook(...) with a valid authentication
+ *     token.</dd>
  * </dl>
  */
 struct SharedNotebook {
@@ -1407,12 +1570,140 @@ struct SharedNotebook {
   2:  optional i32 userId,
   3:  optional string notebookGuid,
   4:  optional string email,
-  5:  optional bool notebookModifiable,
-  6:  optional bool requireLogin,
+  5:  optional bool notebookModifiable,  // deprecated
+  6:  optional bool requireLogin,  // deprecated
   7:  optional Timestamp serviceCreated,
- 10:  optional Timestamp serviceUpdated,  
+ 10:  optional Timestamp serviceUpdated,
   8:  optional string shareKey,
-  9:  optional string username
+  9:  optional string username,
+ 11:  optional SharedNotebookPrivilegeLevel privilege,
+ 12:  optional bool allowPreview
+}
+
+/**
+ * This structure captures information about the types of operations
+ * that cannot be performed on a given notebook with a type of
+ * authenticated access and credentials.  The values filled into this
+ * structure are based on then-current values in the server database
+ * for shared notebooks and notebook publishing records, as well as
+ * information related to the authentication token.  Information from
+ * the authentication token includes the application that is accessing
+ * the server, as defined by the permissions granted by consumer (api)
+ * key, and the method used to obtain the token, for example via
+ * authenticateToSharedNotebook, authenticateToBusiness, etc.  Note
+ * that changes to values in this structure that are the result of
+ * shared notebook or publishing record changes are communicated to
+ * the client via a change in the notebook USN during sync.  It is
+ * important to use the same access method, parameters, and consumer
+ * key in order obtain correct results from the sync engine.
+ *
+ * The server has the final say on what is allowed as values may
+ * change between calls to obtain NotebookRestrictions instances
+ * and to operate on data on the service.
+ *
+ * If the following are set and true, then the given restriction is
+ * in effect, as accessed by the same authentication token from which
+ * the values were obtained.
+ *
+ * <dt>noReadNotes</dt>
+ *   <dd>The client is not able to read notes from the service and
+ *   the notebook is write-only.
+ *   </dd>
+ * <dt>noCreateNotes</dt>
+ *   <dd>The client may not create new notes in the notebook.
+ *   </dd>
+ * <dt>noUpdateNotes</dt>
+ *   <dd>The client may not update notes currently in the notebook.
+ *   </dd>
+ * <dt>noExpungeNotes</dt>
+ *   <dd>The client may not expunge notes currently in the notebook.
+ *   </dd>
+ * <dt>noShareNotes</dt>
+ *   <dd>The client may not share notes in the notebook via the
+ *   shareNote method.
+ *   </dd>
+ * <dt>noEmailNotes</dt>
+ *   <dd>The client may not e-mail notes via the Evernote service by
+ *   using the emailNote method.
+ *   </dd>
+ * <dt>noSendMessageToRecipients</dt>
+ *   <dd>The client may not send messages to the share recipients of
+ *   the notebook.
+ *   </dd>
+ * <dt>noUpdateNotebook</dt>
+ *   <dd>The client may not update the Notebook object itself, for
+ *   example, via the updateNotebook method.
+ *   </dd>
+ * <dt>noExpungeNotebook</dt>
+ *   <dd>The client may not expunge the Notebook object itself, for
+ *   example, via the expungeNotebook method.
+ *   </dd>
+ * <dt>noSetDefaultNotebook</dt>
+ *   <dd>The client may not set this notebook to be the default notebook.
+ *   The caller should leave Notebook.defaultNotebook unset.
+ *   </dd>
+ * <dt>noSetNotebookStack</dt>
+ *   <dd>If the client is able to update the Notebook, the Notebook.stack
+ *   value may not be set.
+ *   </dd>
+ * <dt>noPublishToPublic</dt>
+ *   <dd>The client may not change the publish the notebook to the public.
+ *   For example, business notebooks may not be shared publicly.
+ *   </dd>
+ * <dt>noPublishToBusinessLibrary</dt>
+ *   <dd>The client may not publish the notebook to the business library.
+ *   </dd>
+ * <dt>noCreateTags</dt>
+ *   <dd>The client may not complete an operation that results in a new tag
+ *   being created in the owner's account.
+ *   </dd>
+ * <dt>noUpdateTags</dt>
+ *   <dd>The client may not update tags in the owner's account.
+ *   </dd>
+ * <dt>noExpungeTags</dt>
+ *   <dd>The client may not expunge tags in the owner's account.
+ *   </dd>
+ * <dt>noSetParentTag</dt>
+ *   <dd>If the client is able to create or update tags in the owner's account,
+ *   then they will not be able to set the parent tag.  Leave the value unset.
+ *   </dd>
+ * <dt>noCreateSharedNotebooks</dt>
+ *   <dd>The client is unable to create shared notebooks for the notebook.
+ *   </dd>
+ * <dt>updateWhichSharedNotebookRestrictions</dt>
+ *   <dd>Restrictions on which shared notebook instances can be updated.  If the
+ *   value is not set or null, then the client can update any of the shared notebooks
+ *   associated with the notebook on which the NotebookRestrictions are defined.
+ *   See the enumeration for further details.
+ *   </dd>          
+ * <dt>expungeWhichSharedNotebookRestrictions</dt>
+ *   <dd>Restrictions on which shared notebook instances can be expunged.  If the
+ *   value is not set or null, then the client can expunge any of the shared notebooks
+ *   associated with the notebook on which the NotebookRestrictions are defined.
+ *   See the enumeration for further details.
+ *   </dd>
+ */
+struct NotebookRestrictions {
+  1:  optional bool noReadNotes,
+  2:  optional bool noCreateNotes,
+  3:  optional bool noUpdateNotes,
+  4:  optional bool noExpungeNotes,
+  5:  optional bool noShareNotes,
+  6:  optional bool noEmailNotes,
+  7:  optional bool noSendMessageToRecipients,
+  8:  optional bool noUpdateNotebook,
+  9:  optional bool noExpungeNotebook,
+  10: optional bool noSetDefaultNotebook,
+  11: optional bool noSetNotebookStack,
+  12: optional bool noPublishToPublic,
+  13: optional bool noPublishToBusinessLibrary,
+  14: optional bool noCreateTags,
+  15: optional bool noUpdateTags,
+  16: optional bool noExpungeTags,
+  17: optional bool noSetParentTag,
+  18: optional bool noCreateSharedNotebooks,
+  19: optional SharedNotebookInstanceRestrictions updateWhichSharedNotebookRestrictions,
+  20: optional SharedNotebookInstanceRestrictions expungeWhichSharedNotebookRestrictions
 }
 
 /**
@@ -1472,20 +1763,22 @@ struct SharedNotebook {
  *   </dd>
  *
  * <dt>publishing</dt>
- *   <dd>If the Notebook has been opened for public access (i.e.
- *   if 'published' is set to true), then this will point to the set of
- *   publishing information for the Notebook (URI, description, etc.).  A
- *   Notebook cannot be published without providing this information, but it
- *   will persist for later use if publishing is ever disabled on the Notebook.
- *   Clients that do not wish to change the publishing behavior of a Notebook
- *   should not set this value when calling NoteStore.updateNotebook().
+ *   <dd>If the Notebook has been opened for public access, or
+ *   business users shared with their business (i.e. if 'published' is
+ *   set to true), then this will point to the set of publishing
+ *   information for the Notebook (URI, description, etc.).  A
+ *   Notebook cannot be published without providing this information,
+ *   but it will persist for later use if publishing is ever disabled
+ *   on the Notebook.  Clients that do not wish to change the
+ *   publishing behavior of a Notebook should not set this value when
+ *   calling NoteStore.updateNotebook().
  *   </dd>
  *
  * <dt>published</dt>
  *   <dd>If this is set to true, then the Notebook will be
- *   accessible to the public via the 'publishing' specification, which must
- *   also be set.  If this is set to false, the Notebook will not be available
- *   to the public.
+ *   accessible either to the public, or for business users to their business,
+ *   via the 'publishing' specification, which must also be set.  If this is set
+ *   to false, the Notebook will not be available to the public (or business).
  *   Clients that do not wish to change the publishing behavior of a Notebook
  *   should not set this value when calling NoteStore.updateNotebook().
  *   </dd>
@@ -1507,8 +1800,26 @@ struct SharedNotebook {
  *   be unset if you do not have permission to access this data. If you are
  *   accessing the notebook as the owner or via a shared notebook that is
  *   modifiable, then you have access to this data and the value will be set.
- *   This field is read-only. Clients may not make changes to shared notebooks 
+ *   This field is read-only. Clients may not make changes to shared notebooks
  *   via this field.
+ *   </dd>
+ *
+ * <dt>businessNotebook</dt>
+ *   <dd>If the notebook is part of a business account and has been published to the
+ *   business library, this will contain information for the library listing.
+ *   The presence or absence of this field is not a reliable test of whether a given
+ *   notebook is in fact a business notebook - the field is only used when a notebook is or
+ *   has been published to the business library.
+ *   </dd>
+ *
+ * <dt>contact</dt>
+ *   <dd>Intended for use with Business accounts, this field identifies the user who
+ *   has been designated as the "contact".  For notebooks created in business
+ *   accounts, the server will automatically set this value to the user who created
+ *   the notebook unless Notebook.contact.username has been set, in which that value
+ *   will be used.  When updating a notebook, it is common to leave Notebook.contact
+ *   field unset, indicating that no change to the value is being requested and that
+ *   the existing value, if any, should be preserved.
  *   </dd>
  *
  * </dl>
@@ -1524,7 +1835,10 @@ struct Notebook {
   11: optional  bool published,
   12: optional  string stack,
   13: optional  list<i64> sharedNotebookIds,
-  14: optional  list<SharedNotebook> sharedNotebooks  
+  14: optional  list<SharedNotebook> sharedNotebooks,
+  15: optional  BusinessNotebook businessNotebook,
+  16: optional  User contact,
+  17: optional  NotebookRestrictions restrictions
 }
 
 /**
@@ -1550,8 +1864,8 @@ struct Notebook {
  *
  * <dt>guid</dt>
  *   <dd>The unique identifier of this linked notebook.  Will be set whenever
- *   a resource is retrieved from the service, but may be null when a client
- *   is creating a resource.
+ *   a linked notebook is retrieved from the service, but may be null when a client
+ *   is creating a linked notebook.
  *   <br/>
  *   Length:  EDAM_GUID_LEN_MIN - EDAM_GUID_LEN_MAX
  *   <br/>
@@ -1583,6 +1897,20 @@ struct Notebook {
  *   end of this string to construct the full URL, as documented on our
  *   developer web site.
  *   </dd>
+ *
+ * <dt>stack</dt>
+ *   <dd>If this is set, then the notebook is visually contained within a stack
+ *   of notebooks with this name.  All notebooks in the same account with the
+ *   same 'stack' field are considered to be in the same stack.
+ *   Notebooks with no stack set are "top level" and not contained within a
+ *   stack.  The link owner can change this and this field is for the benefit
+ *   of the link owner.
+ *   </dd>
+ *
+ * <dt>businessId</dt>
+ *   <dd>If set, this will be the unique identifier for the business that owns
+ *   the notebook to which the linked notebook refers.
+ *
  * </dl>
  */
 struct LinkedNotebook {
@@ -1594,5 +1922,44 @@ struct LinkedNotebook {
   7:  optional Guid guid,
   8:  optional i32 updateSequenceNum,
   9:  optional string noteStoreUrl,
-  10: optional string webApiUrlPrefix
+  10: optional string webApiUrlPrefix,
+  11: optional string stack,
+  12: optional i32 businessId
+}
+
+/**
+ * A structure that describes a notebook or a user's relationship with
+ * a notebook. NotebookDescriptor is expected to remain a lighter-weight
+ * structure when compared to Notebook.
+ * <dl>
+ * <dt>guid</dt>
+ *   <dd>The unique identifier of the notebook.
+ *   </dd>
+ *
+ * <dt>notebookDisplayName</dt>
+ *   <dd>A sequence of characters representing the name of the
+ *   notebook.
+ *   </dd>
+ *
+ * <dt>contactName</dt>
+ *   <dd>The User.name value of the notebook's "contact".
+ *   </dd>
+ *
+ * <dt>hasSharedNotebook</dt>
+ *   <dd>Whether a SharedNotebook record exists between the calling user and this
+ *   notebook.
+ *   </dd>
+ *
+ * <dt>joinedUserCount</dt>
+ *   <dd>The number of users who have joined this notebook.
+ *   </dd>
+ *
+ * </dl>
+ */
+struct NotebookDescriptor {
+  1: optional Guid guid,
+  2: optional string notebookDisplayName,
+  3: optional string contactName,
+  4: optional bool hasSharedNotebook,
+  5: optional i32 joinedUserCount
 }
