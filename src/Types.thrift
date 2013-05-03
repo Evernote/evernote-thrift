@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2012 Evernote Corporation.
+ * Copyright 2007-2013 Evernote Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -96,6 +96,7 @@ typedef i64 Timestamp
 enum PrivilegeLevel {
   NORMAL = 1,
   PREMIUM = 3,
+  VIP = 5,
   MANAGER = 7,
   SUPPORT = 8,
   ADMIN = 9
@@ -209,9 +210,9 @@ enum SponsoredGroupRole {
 
 /**
  * Enumeration of the roles that a User can have within an Evernote Business account.
- * 
+ *
  * ADMIN: The user is an administrator of the Evernote Business account.
- * 
+ *
  * NORMAL: The user is a regular user within the Evernote Business account.
  */
 enum BusinessUserRole {
@@ -229,12 +230,27 @@ enum BusinessUserRole {
  *   Shared notebooks that the recipient has joined (the username has already been
  *   assigned to our user) are in the domain.  Additionally, shared notebooks
  *   that allow preview and have not yet been joined are in the domain.
- * 
+ *
  * NO_SHARED_NOTEBOOKS: No shared notebooks are applicable to the operation.
  */
 enum SharedNotebookInstanceRestrictions {
-  ONLY_JOINED_OR_PREVIEW = 1,                           
+  ONLY_JOINED_OR_PREVIEW = 1,
   NO_SHARED_NOTEBOOKS    = 2   // most restrictive
+}
+
+/**
+ * An enumeration describing the configuration state related to receiving
+ * reminder e-mails from the service.  Reminder e-mails summarize notes
+ * based on their Note.attributes.reminderTime values.
+ *
+ * DO_NOT_SEND: The user has selected to not receive reminder e-mail.
+ *
+ * SEND_DAILY_EMAIL: The user has selected to receive reminder e-mail for those
+ *   days when there is a reminder.
+ */
+enum ReminderEmailConfig {
+  DO_NOT_SEND      = 1,
+  SEND_DAILY_EMAIL = 2
 }
 
 // ============================== Constants ===================================
@@ -460,11 +476,6 @@ struct Data {
  *       If not set, then the 'preferredLanguage' will be used.
  *   </dd>
  *
- * <dt>customerProfileId</dt>
- *   <dd>a numeric identified which provides a linkage between the user record
- *       and the direct credit card payment creditcard profile.
- *   </dd>
- *
  * <dt>educationalInstitution</dt>
  *   <dd>a flag indicating that the user is part of an educational institution which
  *   makes them eligible for discounts on bulk purchases
@@ -473,16 +484,27 @@ struct Data {
  * <dt>businessAddress</dt>
  *   <dd>A string recording the business address of a Sponsored Account user who has requested invoicing.
  *   </dd>
- * </dl>
  *
  * <dt>hideSponsorBilling</dt>
  *   <dd>A flag indicating whether to hide the billing information on a sponsored
  *       account owner's settings page
  *   </dd>
- * </dl>
  *
  * <dt>taxExempt</dt>
  *   <dd>A flag indicating the user's sponsored group is exempt from sale tax
+ *   </dd>
+ *
+ * <dt>useEmailAutoFiling</dt>
+ *   <dd>A flag indicating whether the user chooses to allow Evernote to automatically
+ *       file and tag emailed notes
+ *   </dd>
+ *
+ * <dt>reminderEmailConfig</dt>
+ *   <dd>Configuration state for whether or not the user wishes to receive
+ *       reminder e-mail.  This setting applies to both the reminder e-mail sent
+ *       for personal reminder notes and for the reminder e-mail sent for reminder
+ *       notes in the user's business notebooks that the user has configured for
+ *       e-mail notifications.
  *   </dd>
  * </dl>
  */
@@ -511,12 +533,13 @@ struct UserAttributes {
   24: optional  string twitterId,
   25: optional  string groupName,
   26: optional  string recognitionLanguage,
-  27: optional  i64 customerProfileId,
   28: optional  string referralProof,
   29: optional  bool educationalDiscount,
   30: optional  string businessAddress,
   31: optional  bool hideSponsorBilling,
-  32: optional  bool taxExempt
+  32: optional  bool taxExempt,
+  33: optional  bool useEmailAutoFiling,
+  34: optional  ReminderEmailConfig reminderEmailConfig
 }
 
 /**
@@ -596,14 +619,15 @@ struct UserAttributes {
  * <dt>unitPrice</dt>
  *   <dd>charge in the smallest unit of the currency (e.g. cents for USD)</dd>
  * <dt>businessId</dt>
- *   <dd>If set, the ID of the Evernote Business account that the user is a
- *       member of. If not set, the user is not a member of a business.</dd>
+ *   <dd><i>DEPRECATED:</i>See BusinessUserInfo.</dd>
  * <dt>businessName</dt>
- *   <dd>The human-readable name of the Evernote Business account that
- *       the user is a member of.</dd>
+ *   <dd><i>DEPRECATED:</i>See BusinessUserInfo.</dd>
  * <dt>businessRole</dt>
- *   <dd>If set, the role of the user within the Evernote Business account
- *       that they are a member of.</dd>
+ *   <dd><i>DEPRECATED:</i>See BusinessUserInfo.</dd>
+ * <dt>unitDiscount</dt>
+ *   <dd>discount per seat in negative amount and smallest unit of the currency (e.g. cents for USD)</dd>
+ * <dt>nextChargeDate</dt>
+ *   <dd>The next time the user will be charged, may or may not be the same as nextPaymentDue</dd>
  * </dl>
  */
 struct Accounting {
@@ -627,9 +651,39 @@ struct Accounting {
   19: optional  i32                unitPrice,
   20: optional  i32                businessId,
   21: optional  string             businessName,
-  22: optional  BusinessUserRole   businessRole
+  22: optional  BusinessUserRole   businessRole,
+  23: optional  i32                unitDiscount,
+  24: optional  Timestamp          nextChargeDate
 }
 
+/**
+ * This structure is used to provide information about an Evernote Business
+ * membership, for members who are part of a business.
+ *
+ * <dl>
+ * <dt>businessId</dt>
+ *   <dd>The ID of the Evernote Business account that the user is a member of.
+ * <dt>businessName</dt>
+ *   <dd>The human-readable name of the Evernote Business account that the user
+ *       is a member of.</dd>
+ * <dt>role</dt>
+ *   <dd>The role of the user within the Evernote Business account that
+ *       they are a member of.</dd>
+ * <dt>email</dt>
+ *   <dd>An e-mail address that will be used by the service in the context of your
+ *       Evernote Business activities.  For example, this e-mail address will be used
+ *       when you e-mail a business note, when you update notes in the account of
+ *       your business, etc.  The business e-mail cannot be used for identification
+ *       purposes such as for logging into the service.
+ *   </dd>
+ * </dl>
+ */
+struct BusinessUserInfo {
+  1:  optional  i32              businessId,
+  2:  optional  string           businessName,
+  3:  optional  BusinessUserRole role,
+  4:  optional  string           email
+}
 
 /**
  * This structure is used to provide information about a user's Premium account.
@@ -649,7 +703,7 @@ struct Accounting {
  * <dt>premiumExpirationDate</dt>
  *   <dd>
  *   The date when the user's Premium account expires, or the date when the
- *   user's account will be charged if it has a recurring payment method.
+ *   user's account is due for payment if it has a recurring payment method.
  *   </dd>
  * <dt>premiumExtendable</dt>
  *   <dd>
@@ -676,6 +730,10 @@ struct Accounting {
  *   <dd>
  *   DEPRECATED - will be removed in a future update.
  *   </dd>
+ * <dt>premiumUpgradable</dt>
+ *   <dd>
+ *   True if the user is eligible for purchasing Premium account upgrade.
+ *   </dd>
  * </dl>
  */
 struct PremiumInfo {
@@ -688,7 +746,8 @@ struct PremiumInfo {
   7:  required bool premiumCancellationPending,
   8:  required bool canPurchaseUploadAllowance,
   9:  optional string sponsoredGroupName,
-  10: optional SponsoredGroupRole sponsoredGroupRole
+  10: optional SponsoredGroupRole sponsoredGroupRole,
+  11: optional bool premiumUpgradable
 }
 
 
@@ -714,8 +773,8 @@ struct PremiumInfo {
  * <dt>email</dt>
  *   <dd>The email address registered for the user.  Must comply with
  *   RFC 2821 and RFC 2822.<br/>
- *   For privacy reasons, this field may not be populated when a User
- *   is retrieved via a call to UserStore.getUser().
+ *   Third party applications that authenticate using OAuth do not have
+ *   access to this field.
  *   Length:  EDAM_EMAIL_LEN_MIN - EDAM_EMAIL_LEN_MAX
  *   <br/>
  *   Regex:  EDAM_EMAIL_REGEX
@@ -787,6 +846,12 @@ struct PremiumInfo {
  *   <dd>If present, this will contain a set of commerce information
  *   relating to the user's premium service level.
  *   </dd>
+ *
+ * <dt>businessUserInfo</dt>
+ *   <dd>If present, this will contain a set of business information
+ *   relating to the user's business membership.  If not present, the
+ *   user is not currently part of a business.
+ *   </dd>
  * </dl>
  */
 struct User {
@@ -803,7 +868,8 @@ struct User {
   14: optional  string shardId,
   15: optional  UserAttributes attributes,
   16: optional  Accounting accounting,
-  17: optional  PremiumInfo premiumInfo
+  17: optional  PremiumInfo premiumInfo,
+  18: optional  BusinessUserInfo businessUserInfo
 }
 
 
@@ -1139,10 +1205,52 @@ struct Resource {
  * <dt>shareDate</dt>
  *  <dd>The date and time when this note was directly shared via its own URL.
  *  This is only set on notes that were individually shared - it is independent
- *  of any notebook-level sharing of the containing notepbook. This field
+ *  of any notebook-level sharing of the containing notebook. This field
  *  is treated as "read-only" for clients; the server will ignore changes
  *  to this field from an external client.
  *  </dd>
+ *
+ * <dt>reminderOrder</dt>
+ * <dd>The set of notes with this parameter set are considered
+ * "reminders" and are to be treated specially by clients to give them
+ * higher UI prominence within a notebook.  The value is used to sort
+ * the reminder notes within the notebook with higher values
+ * representing greater prominence.  Outside of the context of a
+ * notebook, the value of this parameter is undefined.  The value is
+ * not intended to be compared to the values of reminder notes in
+ * other notebooks.  In order to allow clients to place a note at a
+ * higher precedence than other notes, you should never set a value
+ * greater than the current time (as defined for a Timetstamp). To
+ * place a note at higher precedence than existing notes, set the
+ * value to the current time as defined for a timestamp (milliseconds
+ * since the epoch).  Synchronizing clients must remember the time when
+ * the update was performed, using the local clock on the client,
+ * and use that value when they later upload the note to the service.
+ * Clients must not set the reminderOrder to the reminderTime as the
+ * reminderTime could be in the future.  Those two fields are never
+ * intended to be related.  The correct value for reminderOrder field
+ * for new notes is the "current" time when the user indicated that
+ * the note is a reminder.  Clients may implement a separate
+ * "sort by date" feature to show notes ordered by reminderTime.
+ * Whenever a reminderDoneTime or reminderTime is set but a
+ * reminderOrder is not set, the server will fill in the current
+ * server time for the reminderOrder field.</dd>
+ *
+ * <dt>reminderDoneTime</dt>
+ * <dd>The date and time when a user dismissed/"marked done" the reminder
+ * on the note.  Users typically do not manually set this value directly
+ * as it is set to the time when the user dismissed/"marked done" the
+ * reminder.</dd>
+ *
+ * <dt>reminderTime</dt>
+ * <dd>The date and time a user has selected to be reminded of the note.
+ * A note with this value set is known as a "reminder" and the user can
+ * be reminded, via e-mail or client-specific notifications, of the note
+ * when the time is reached or about to be reached.  When a user sets
+ * a reminder time on a note that has a reminder done time, and that
+ * reminder time is in the future, then the reminder done time should be
+ * cleared.  This should happen regardless of any existing reminder time
+ * that may have previously existed on the note.</dd>
  *
  * <dt>placeName</dt>
  * <dd>Allows the user to assign a human-readable location name associated
@@ -1163,7 +1271,9 @@ struct Resource {
  * application does not specifically support the specified class,
  * the client MUST treat the note as read-only. In this case, the
  * client MAY modify the note's notebook and tags via the
- * Note.notebookGuid and Note.tagGuids fields.
+ * Note.notebookGuid and Note.tagGuids fields.  The client MAY also
+ * modify the pinProminence field as well as the reminderTime and
+ * reminderDismissTime fields.
  * <p>Applications should set contentClass only when they are creating notes
  * that contain structured information that needs to be maintained in order
  * for the user to be able to use the note within that application.
@@ -1203,7 +1313,7 @@ struct Resource {
  * guest who made the last edit.  If you do not have access to this value,
  * it will be left unset.  This field is read-only by clients.  The server
  * will ignore all values set by clients into this field.</dd>
-
+ *
  * <dt>classifications</dt>
  * <dd>A map of classifications applied to the note by clients or by the
  * Evernote service. The key is the string name of the classification type,
@@ -1221,6 +1331,9 @@ struct NoteAttributes {
   15: optional  string sourceURL,
   16: optional  string sourceApplication,
   17: optional  Timestamp shareDate,
+  18: optional  i64 reminderOrder,
+  19: optional  Timestamp reminderDoneTime,
+  20: optional  Timestamp reminderTime,
   21: optional  string placeName,
   22: optional  string contentClass,
   23: optional  LazyMap applicationData,
@@ -1430,7 +1543,7 @@ struct Publishing {
  * the to business library, the Notebook will have a reference to one of these
  * structures, which specifies how the Notebook will be represented in the
  * library.
- * 
+ *
  * <dl>
  * <dt>notebookDescription</dt>
  *   <dd>A short description of the notebook's content that will be displayed
@@ -1459,6 +1572,31 @@ struct BusinessNotebook {
   2:  optional  SharedNotebookPrivilegeLevel privilege,
   3:  optional  bool recommended
 }
+
+
+/**
+ * A structure defining the scope of a SavedSearch.
+ *
+ * <dl>
+ *   <dt>includeAccount</dt>
+ *   <dd>The search should include notes from the account that contains the SavedSearch.</dd>
+ *
+ *   <dt>includePersonalLinkedNotebooks</dt>
+ *   <dd>The search should include notes within those shared notebooks
+ *   that the user has joined that are NOT business notebooks.</dd>
+ *
+ *   <dt>includeBusinessLinkedNotebooks</dt>
+ *   <dd>The search should include notes within those shared notebooks
+ *   that the user has joined that are business notebooks in the business that
+ *   the user is currently a member of.</dd>
+ * </dl>
+ */
+struct SavedSearchScope {
+  1:  optional bool includeAccount,
+  2:  optional bool includePersonalLinkedNotebooks,
+  3:  optional bool includeBusinessLinkedNotebooks
+}
+
 
 /**
  * A named search associated with the account that can be quickly re-used.
@@ -1499,6 +1637,20 @@ struct BusinessNotebook {
  *   account, and can be used to compare the order of modifications within the
  *   service.
  *   </dd>
+ *
+ * <dt>scope</dt>
+ *   <dd><p>Specifies the set of notes that should be included in the search, if
+ *    possible.</p>
+ *    <p>Clients are expected to search as much of the desired scope as possible,
+ *    with the understanding that a given client may not be able to cover the full
+ *    specified scope. For example, when executing a search that includes notes in both
+ *    the owner's account and business notebooks, a mobile client may choose to only
+ *    search within the user's account because it is not capable of searching both
+ *    scopes simultaneously. When a search across multiple scopes is not possible,
+ *    a client may choose which scope to search based on the current application
+ *    context. If a client cannot search any of the desired scopes, it should refuse
+ *    to execute the search.</p>
+ *    </dd>
  * </dl>
  */
 struct SavedSearch {
@@ -1506,7 +1658,8 @@ struct SavedSearch {
   2:  optional  string name,
   3:  optional  string query,
   4:  optional  QueryFormat format,
-  5:  optional  i32 updateSequenceNum
+  5:  optional  i32 updateSequenceNum,
+  6:  optional  SavedSearchScope scope
 }
 
 /**
@@ -1675,7 +1828,7 @@ struct SharedNotebook {
  *   value is not set or null, then the client can update any of the shared notebooks
  *   associated with the notebook on which the NotebookRestrictions are defined.
  *   See the enumeration for further details.
- *   </dd>          
+ *   </dd>
  * <dt>expungeWhichSharedNotebookRestrictions</dt>
  *   <dd>Restrictions on which shared notebook instances can be expunged.  If the
  *   value is not set or null, then the client can expunge any of the shared notebooks

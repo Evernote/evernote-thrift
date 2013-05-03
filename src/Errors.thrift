@@ -79,6 +79,12 @@ namespace perl EDAMErrors
  *         too many of something.</dd>
  *   <dt>UNSUPPORTED_OPERATION</dt>
  *     <dd>Operation denied because it is currently unsupported.</dd>
+ *   <dt>TAKEN_DOWN</dt>
+ *     <dd>Operation denied because access to the corresponding object is
+ *         prohibited in response to a take-down notice.</dd>
+ *   <dt>RATE_LIMIT_REACHED</dt>
+ *     <dd>Operation denied because the calling application has reached
+ *         its hourly API call limit for this user.</dd>
  * </dl>
  */
 enum EDAMErrorCode {
@@ -98,7 +104,9 @@ enum EDAMErrorCode {
   LEN_TOO_LONG = 14,
   TOO_FEW = 15,
   TOO_MANY = 16,
-  UNSUPPORTED_OPERATION = 17
+  UNSUPPORTED_OPERATION = 17,
+  TAKEN_DOWN = 18,
+  RATE_LIMIT_REACHED = 19
 }
 
 /**
@@ -132,10 +140,16 @@ exception EDAMUserException {
  *   must be one of the values of EDAMErrorCode.
  *
  * message:  This may contain additional information about the error
+ *
+ * rateLimitDuration:  Indicates the minimum number of seconds that an application should
+ *   expect subsequent API calls for this user to fail. The application should not retry
+ *   API requests for the user until at least this many seconds have passed. Present only
+ *   when errorCode is RATE_LIMIT_REACHED,
  */
 exception EDAMSystemException {
   1:  required  EDAMErrorCode errorCode,
-  2:  optional  string message
+  2:  optional  string message,
+  3:  optional  i32 rateLimitDuration
 }
 
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2012 Evernote Corporation.
+ * Copyright 2007-2013 Evernote Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -54,7 +54,7 @@ const i16 EDAM_VERSION_MAJOR = 1
  * Clients pass this to the service using UserStore.checkVersion at the
  * beginning of a session to confirm that they are not out of date.
  */
-const i16 EDAM_VERSION_MINOR = 23
+const i16 EDAM_VERSION_MINOR = 24
 
 //============================= Enumerations ==================================
 
@@ -304,10 +304,9 @@ service UserStore {
    * @param clientName
    *   This string provides some information about the client for
    *   tracking/logging on the service.  It should provide information about
-   *   the client's software and platform.  The structure should be:
+   *   the client's software and platform. The structure should be:
    *   application/version; platform/version; [ device/version ]
-   *   E.g.   "Evernote Windows/3.0.1; Windows/XP SP3" or
-   *   "Evernote Clipper/1.0.1; JME/2.0; Motorola RAZR/2.0;
+   *   E.g. "Evernote Windows/3.0.1; Windows/XP SP3".
    *
    * @param edamVersionMajor
    *   This should be the major protocol version that was compiled by the
@@ -365,9 +364,9 @@ service UserStore {
    *   by Evernote.
    *
    * @return
-   *   The result of the authentication.  If the authentication was successful,
+   *   <p>The result of the authentication.  If the authentication was successful,
    *   the AuthenticationResult.user field will be set with the full information
-   *   about the User.
+   *   about the User.</p>
    *
    * @throws EDAMUserException <ul>
    *   <li> DATA_REQUIRED "username" - username is empty
@@ -441,9 +440,9 @@ service UserStore {
    *   expression EDAM_DEVICE_DESCRIPTION_REGEX.
    *
    * @return
-   *   The result of the authentication. The level of detail provided in the returned
+   *   <p>The result of the authentication. The level of detail provided in the returned
    *   AuthenticationResult.User structure depends on the access level granted by 
-   *   calling application's API key.
+   *   calling application's API key.</p>
    *
    * @throws EDAMUserException <ul>
    *   <li> DATA_REQUIRED "username" - username is empty
@@ -471,6 +470,27 @@ service UserStore {
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMSystemException systemException),
 
+  /**
+   * Revoke an existing long lived authentication token. This can be used to
+   * revoke OAuth tokens or tokens created by calling authenticateLongSession,
+   * and allows a user to effectively log out of Evernote from the perspective
+   * of the application that holds the token. The authentication token that is
+   * passed is immediately revoked and may not be used to call any authenticated
+   * EDAM function. 
+   *
+   * @param authenticationToken the authentication token to revoke.
+   *
+   * @throws EDAMUserException <ul>
+   *   <li> DATA_REQUIRED "authenticationToken" - no authentication token provided
+   *   <li> BAD_DATA_FORMAT "authenticationToken" - the authentication token is not well formed
+   *   <li> INVALID_AUTH "authenticationToken" - the authentication token is invalid
+   *   <li> AUTH_EXPIRED "authenticationToken" - the authentication token is expired or 
+   *     is already revoked.
+   * </ul>
+   */
+  void revokeLongSession(1: string authenticationToken)
+    throws (1: Errors.EDAMUserException userException,
+            2: Errors.EDAMSystemException systemException),
 
   /**
    * This is used to take an existing authentication token that grants access

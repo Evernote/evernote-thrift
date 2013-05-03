@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2012 Evernote Corporation.
+ * Copyright 2007-2013 Evernote Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -42,7 +42,6 @@ namespace rb Evernote.EDAM.NoteStore
 namespace php EDAM.NoteStore
 namespace cocoa EDAM
 namespace perl EDAMNoteStore
-
 
 /**
  * This structure encapsulates the information about the state of the
@@ -127,8 +126,8 @@ struct SyncState {
  *   If present, this is a list of non-expunged notes that
  *   have a USN in this chunk.  This will include notes that are "deleted"
  *   but not expunged (i.e. in the trash).  The notes will include their list
- *   of tags and resources, but the resource content and recognition data
- *   will not be supplied.
+ *   of tags and resources, but the note content, resource content, resource
+ *   recognition data and resource alternate data will not be supplied.
  *   </dd>
  *
  * <dt>notebooks</dt>
@@ -211,7 +210,7 @@ struct SyncChunk {
   11: optional  list<Types.Guid> expungedTags,
   12: optional  list<Types.Guid> expungedSearches,
   13: optional  list<Types.LinkedNotebook> linkedNotebooks,
-  14: optional  list<Types.Guid> expungedLinkedNotebooks,
+  14: optional  list<Types.Guid> expungedLinkedNotebooks
 }
 
 /**
@@ -489,6 +488,7 @@ struct NoteMetadata {
   5:  optional  i32 contentLength,
   6:  optional  Types.Timestamp created,
   7:  optional  Types.Timestamp updated,
+  8:  optional  Types.Timestamp deleted,
   10: optional  i32 updateSequenceNum,
   11: optional  string notebookGuid,
   12: optional  list<Types.Guid> tagGuids,
@@ -578,6 +578,7 @@ struct NotesMetadataResultSpec {
   5:  optional  bool includeContentLength,
   6:  optional  bool includeCreated,
   7:  optional  bool includeUpdated,
+  8:  optional  bool includeDeleted,
   10: optional  bool includeUpdateSequenceNum,
   11: optional  bool includeNotebookGuid,
   12: optional  bool includeTagGuids,
@@ -801,20 +802,13 @@ struct RelatedQuery {
  *     list will occur once per notebook GUID and are represented as
  *     NotebookDescriptor objects.</dd>
  * </dl>
- *
- * <dt>debugInfo</dt>
- * <dd>NOTE: This should be excluded from the public API.<br /><br />
- *     If <code>includeDebugInfo</code> in RelatedResultSpec is set to
- *     <code>true</code>, this field may contain debug information
- *     if the service decides to do so.</dd>
  * </dl>
  */
 struct RelatedResult {
   1: optional list<Types.Note> notes,
   2: optional list<Types.Notebook> notebooks,
   3: optional list<Types.Tag> tags,
-  4: optional list<Types.NotebookDescriptor> containingNotebooks,
-  5: optional string debugInfo
+  4: optional list<Types.NotebookDescriptor> containingNotebooks
 }
 
 /**
@@ -855,11 +849,6 @@ struct RelatedResult {
  *     in the RelatedResult, which will contain the list of notebooks to
  *     to which the returned related notes belong.</dd>
  * </dl>
- *
- * <dt>includeDebugInfo</dt>
- * <dd>NOTE: This should be excluded from the public API.<br /><br />
- *     If set to <code>true</code>, indicate that debug information should
- *     be returned in the 'debugInfo' field of RelatedResult.</dd>
  * </dl>
  */
 struct RelatedResultSpec {
@@ -867,11 +856,10 @@ struct RelatedResultSpec {
   2: optional i32 maxNotebooks,
   3: optional i32 maxTags,
   4: optional bool writableNotebooksOnly,
-  5: optional bool includeContainingNotebooks,
-  6: optional bool includeDebugInfo
+  5: optional bool includeContainingNotebooks
 }
 
-/**
+/*
  * Service:  NoteStore
  * <p>
  * The NoteStore service is used by EDAM clients to exchange information
@@ -925,39 +913,7 @@ service NoteStore {
             2: Errors.EDAMSystemException systemException),
 
   /**
-   * Asks the NoteStore to provide the state of the account in order of
-   * last modification.  This request retrieves one block of the server's
-   * state so that a client can make several small requests against a large
-   * account rather than getting the entire state in one big message.
-   *
-   * @param afterUSN
-   *   The client can pass this value to ask only for objects that
-   *   have been updated after a certain point.  This allows the client to
-   *   receive updates after its last checkpoint rather than doing a full
-   *   synchronization on every pass.  The default value of "0" indicates
-   *   that the client wants to get objects from the start of the account.
-   *
-   * @param maxEntries
-   *   The maximum number of modified objects that should be
-   *   returned in the result SyncChunk. This can be used to limit the size
-   *   of each individual message to be friendly for network transfer.
-   *   Applications should not request more than 256 objects at a time,
-   *   and must handle the case where the service returns less than the
-   *   requested number of objects in a given request even though more
-   *   objects are available on the service.
-   *
-   * @param fullSyncOnly
-   *   If true, then the client only wants initial data for a full sync.
-   *   In this case, the service will not return any expunged objects,
-   *   and will not return any Resources, since these are also provided
-   *   in their corresponding Notes.
-   *
-   * @throws EDAMUserException <ul>
-   *   <li> BAD_DATA_FORMAT "afterUSN" - if negative
-   *   </li>
-   *   <li> BAD_DATA_FORMAT "maxEntries" - if less than 1
-   *   </li>
-   * </ul>
+   * DEPRECATED - use getFilteredSyncChunk.
    */
   SyncChunk getSyncChunk(1: string authenticationToken,
                          2: i32 afterUSN,
@@ -971,7 +927,7 @@ service NoteStore {
    * last modification.  This request retrieves one block of the server's
    * state so that a client can make several small requests against a large
    * account rather than getting the entire state in one big message.
-   * This call gives more fine-grained control of the data that will
+   * This call gives fine-grained control of the data that will
    * be received by a client by omitting data elements that a client doesn't
    * need. This may reduce network traffic and sync times.
    *
@@ -1231,7 +1187,7 @@ service NoteStore {
    * If the notebook contains any Notes, they will be moved to the current
    * default notebook and moved into the trash (i.e. Note.active=false).
    * <p/>
-   * NOTE: This function is not available to third party applications.
+   * NOTE: This function is generally not available to third party applications.
    * Calls will result in an EDAMUserException with the error code
    * PERMISSION_DENIED.
    *
@@ -1413,7 +1369,7 @@ service NoteStore {
   /**
    * Permanently deletes the tag with the provided GUID, if present.
    * <p/>
-   * NOTE: This function is not available to third party applications.
+   * NOTE: This function is generally not available to third party applications.
    * Calls will result in an EDAMUserException with the error code
    * PERMISSION_DENIED.
    *
@@ -1461,6 +1417,10 @@ service NoteStore {
    *   </li>
    *   <li> PERMISSION_DENIED "SavedSearch" - private Tag, user doesn't own
    *   </li>
+   *
+   * @throws EDAMNotFoundException <ul>
+   *   <li> "SavedSearch.guid" - not found, by GUID
+   *   </li>
    * </ul>
    */
   Types.SavedSearch getSearch(1: string authenticationToken,
@@ -1474,8 +1434,9 @@ service NoteStore {
    *
    * @param search
    *   The desired list of fields for the search are specified in this
-   *   object.  The caller must specify the
-   *   name, query, and format of the search.
+   *   object. The caller must specify the name and query for the
+   *   search, and may optionally specify a search scope.
+   *   The SavedSearch.format field is ignored by the service.
    *
    * @return
    *   The newly created SavedSearch.  The server-side GUID will be
@@ -1485,8 +1446,6 @@ service NoteStore {
    *   <li> BAD_DATA_FORMAT "SavedSearch.name" - invalid length or pattern
    *   </li>
    *   <li> BAD_DATA_FORMAT "SavedSearch.query" - invalid length
-   *   </li>
-   *   <li> BAD_DATA_FORMAT "SavedSearch.format" - not a valid QueryFormat value
    *   </li>
    *   <li> DATA_CONFLICT "SavedSearch.name" - name already in use
    *   </li>
@@ -1500,9 +1459,9 @@ service NoteStore {
             2: Errors.EDAMSystemException systemException),
 
   /**
-   * Submits search changes to the service.  The provided data must include
-   * the search's guid field for identification.  The service will apply
-   * updates to the following search fields:  name, query, and format
+   * Submits search changes to the service. The provided data must include
+   * the search's guid field for identification. The service will apply
+   * updates to the following search fields: name, query, and scope.
    *
    * @param search
    *   The search object containing the requested changes.
@@ -1514,8 +1473,6 @@ service NoteStore {
    *   <li> BAD_DATA_FORMAT "SavedSearch.name" - invalid length or pattern
    *   </li>
    *   <li> BAD_DATA_FORMAT "SavedSearch.query" - invalid length
-   *   </li>
-   *   <li> BAD_DATA_FORMAT "SavedSearch.format" - not a valid QueryFormat value
    *   </li>
    *   <li> DATA_CONFLICT "SavedSearch.name" - name already in use
    *   </li>
@@ -1537,7 +1494,7 @@ service NoteStore {
   /**
    * Permanently deletes the saved search with the provided GUID, if present.
    * <p/>
-   * NOTE: This function is not available to third party applications.
+   * NOTE: This function is generally not available to third party applications.
    * Calls will result in an EDAMUserException with the error code
    * PERMISSION_DENIED.
    *
@@ -1566,49 +1523,7 @@ service NoteStore {
             3: Errors.EDAMNotFoundException notFoundException),
 
   /**
-   * Used to find a set of the notes from a user's account based on various
-   * criteria specified via a NoteFilter object.
-   * The Notes (and any embedded Resources) will have empty Data bodies for
-   * contents, resource data, and resource recognition fields.  These values
-   * must be retrieved individually.
-   *
-   * @param authenticationToken
-   *   Must be a valid token for the user's account unless the NoteFilter
-   *   'notebookGuid' is the GUID of a public notebook.
-   *
-   * @param filter
-   *   The list of criteria that will constrain the notes to be returned.
-   *
-   * @param offset
-   *   The numeric index of the first note to show within the sorted
-   *   results.  The numbering scheme starts with "0".  This can be used for
-   *   pagination.
-   *
-   * @param maxNotes
-   *   The most notes to return in this query.  The service will return a set
-   *   of notes that is no larger than this number, but may return fewer notes
-   *   if needed.  The NoteList.totalNotes field in the return value will
-   *   indicate whether there are more values available after the returned set.
-   *
-   * @return
-   *   The list of notes that match the criteria.
-   *
-   * @throws EDAMUserException <ul>
-   *   <li> BAD_DATA_FORMAT "offset" - not between 0 and EDAM_USER_NOTES_MAX
-   *   </li>
-   *   <li> BAD_DATA_FORMAT "maxNotes" - not between 0 and EDAM_USER_NOTES_MAX
-   *   </li>
-   *   <li> BAD_DATA_FORMAT "NoteFilter.notebookGuid" - if malformed
-   *   </li>
-   *   <li> BAD_DATA_FORMAT "NoteFilter.tagGuids" - if any are malformed
-   *   </li>
-   *   <li> BAD_DATA_FORMAT "NoteFilter.words" - if search string too long
-   *   </li>
-   *
-   * @throws EDAMNotFoundException <ul>
-   *   <li> "Notebook.guid" - not found, by GUID
-   *   </li>
-   * </ul>
+   * DEPRECATED. Use findNotesMetadata.
    */
   NoteList findNotes(1: string authenticationToken,
                      2: NoteFilter filter,
@@ -1669,10 +1584,11 @@ service NoteStore {
   /**
    * Used to find the high-level information about a set of the notes from a
    * user's account based on various criteria specified via a NoteFilter object.
-   * This should be used instead of 'findNotes' whenever the client doesn't
-   * really need all of the deep structure of every Note and Resource, but
-   * just wants a high-level list of information.  This will save time and
-   * bandwidth.
+   * <p/>
+   * Web applications that wish to periodically check for new content in a user's
+   * Evernote account should consider using webhooks instead of polling this API.
+   * See http://dev.evernote.com/documentation/cloud/chapters/polling_notification.php
+   * for more information.
    *
    * @param authenticationToken
    *   Must be a valid token for the user's account unless the NoteFilter
@@ -2573,7 +2489,7 @@ service NoteStore {
    *   The GUID of the note that holds the resource to be retrieved.
    *
    * @param contentHash
-   *   The MD5 checksum of the resource within that note. Note that 
+   *   The MD5 checksum of the resource within that note. Note that
    *   this is the binary checksum, for example from Resource.data.bodyHash,
    *   and not the hex-encoded checksum that is used within an en-media
    *   tag in a note body.
@@ -2702,6 +2618,7 @@ service NoteStore {
             2: Errors.EDAMSystemException systemException,
             3: Errors.EDAMNotFoundException notFoundException),
 
+
   /**
    * <p>
    * Looks for a user account with the provided userId on this NoteStore
@@ -2726,8 +2643,7 @@ service NoteStore {
    *    The uri string for the public notebook, from Notebook.publishing.uri.
    *
    * @throws EDAMNotFoundException <ul>
-   *   <li> "Publishing.uri" - not found, by URI
-   *   </li>
+   *   <li>"Publishing.uri" - not found, by URI</li>
    * </ul>
    */
   Types.Notebook getPublicNotebook(1: Types.UserID userId,
@@ -2742,7 +2658,7 @@ service NoteStore {
    * for a user to access the notebook of the shared notebook owner.
    *
    * @param sharedNotebook
-   *   An shared notebook object populated with the email address of the share
+   *   A shared notebook object populated with the email address of the share
    *   recipient, the notebook guid and the access permissions. All other
    *   attributes of the shared object are ignored.
    * @return
@@ -2751,11 +2667,11 @@ service NoteStore {
    *   SharedNotebook.
    *
    * @throws EDAMUserException <ul>
-   *   <li> BAD_DATA_FORMAT "SharedNotebook.email" - if the  email was not valid
+   *   <li>BAD_DATA_FORMAT "SharedNotebook.email" - if the  email was not valid
    *   </li>
    *   </ul>
    * @throws EDAMNotFoundException <ul>
-   *   <li> Notebook.guid - if the notebookGuid is not a valid guid for the user
+   *   <li>Notebook.guid - if the notebookGuid is not a valid guid for the user
    *   </li>
    *   </ul>
    */
@@ -2770,8 +2686,8 @@ service NoteStore {
    *
    * @param authenticationToken
    *   Must be an authentication token from the owner or a shared notebook
-   *   authentication token with sufficient permissions to change invitations
-   *   for a notebook.
+   *   authentication token or business authentication token with sufficient
+   *   permissions to change invitations for a notebook.
    *
    * @param sharedNotebook
    *  The SharedNotebook object containing the requested changes.
@@ -2821,7 +2737,8 @@ service NoteStore {
    *     The email can't be sent because this would exceed the user's daily
    *     email limit.
    *   </li>
-   *   <li> PERMISSION_DENIED "Notebook" - private note, user doesn't own
+   *   <li> PERMISSION_DENIED "Notebook.guid" - The user doesn't have permission to
+   *     send a message for the specified notebook.
    *   </li>
    * </ul>
    *
@@ -2854,7 +2771,7 @@ service NoteStore {
    * Expunges the SharedNotebooks in the user's account using the
    * SharedNotebook.id as the identifier.
    * <p/>
-   * NOTE: This function is not available to third party applications.
+   * NOTE: This function is generally not available to third party applications.
    * Calls will result in an EDAMUserException with the error code
    * PERMISSION_DENIED.
    *
@@ -2937,7 +2854,7 @@ service NoteStore {
   /**
    * Permanently expunges the linked notebook from the account.
    * <p/>
-   * NOTE: This function is not available to third party applications.
+   * NOTE: This function is generally not available to third party applications.
    * Calls will result in an EDAMUserException with the error code
    * PERMISSION_DENIED.
    *
@@ -3032,6 +2949,10 @@ service NoteStore {
 
   /**
    * Attempts to send a single note to one or more email recipients.
+   * <p/>
+   * NOTE: This function is generally not available to third party applications.
+   * Calls will result in an EDAMUserException with the error code
+   * PERMISSION_DENIED.
    *
    * @param authenticationToken
    *    The note will be sent as the user logged in via this token, using that
@@ -3222,6 +3143,5 @@ service NoteStore {
                             3: RelatedResultSpec resultSpec)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMSystemException systemException,
-            3: Errors.EDAMNotFoundException notFoundException),
-
+            3: Errors.EDAMNotFoundException notFoundException)
 }
