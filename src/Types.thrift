@@ -1272,8 +1272,8 @@ struct Resource {
  * the client MUST treat the note as read-only. In this case, the
  * client MAY modify the note's notebook and tags via the
  * Note.notebookGuid and Note.tagGuids fields.  The client MAY also
- * modify the pinProminence field as well as the reminderTime and
- * reminderDismissTime fields.
+ * modify the reminderOrder field as well as the reminderTime and
+ * reminderDoneTime fields.
  * <p>Applications should set contentClass only when they are creating notes
  * that contain structured information that needs to be maintained in order
  * for the user to be able to use the note within that application.
@@ -1303,6 +1303,9 @@ struct Resource {
  * Syntax regex for name (key): EDAM_APPLICATIONDATA_NAME_REGEX
  * </dd>
  *
+ * <dt>creatorId</dt>
+ * <dd>The numeric user ID of the user who originally created the note.</dd>
+ *
  * <dt>lastEditedBy</dt>
  * <dd>An indication of who made the last change to the note.  If you are
  * accessing the note via a shared notebook to which you have modification
@@ -1313,6 +1316,9 @@ struct Resource {
  * guest who made the last edit.  If you do not have access to this value,
  * it will be left unset.  This field is read-only by clients.  The server
  * will ignore all values set by clients into this field.</dd>
+ *
+ * <dt>lastEditorId</dt>
+ * <dd>The numeric user ID of the user described in lastEditedBy.</dd>
  *
  * <dt>classifications</dt>
  * <dd>A map of classifications applied to the note by clients or by the
@@ -1338,7 +1344,9 @@ struct NoteAttributes {
   22: optional  string contentClass,
   23: optional  LazyMap applicationData,
   24: optional  string lastEditedBy,
-  26: optional  map<string, string> classifications
+  26: optional  map<string, string> classifications,
+  27: optional  UserID creatorId,
+  28: optional  UserID lastEditorId
 }
 
 
@@ -1663,6 +1671,38 @@ struct SavedSearch {
 }
 
 /**
+ * Settings meant for the recipient of a shared notebook, such as
+ * for indicating which types of notifications the recipient wishes
+ * for reminders, etc.
+ *
+ * The reminderNotifyEmail and reminderNotifyInApp fields have a
+ * 3-state read value but a 2-state write value.  On read, it is
+ * possible to observe "unset", true, or false.  The initial state is
+ * "unset".  When you choose to set a value, you may set it to either
+ * true or false, but you cannot unset the value.  Once one of these
+ * members has a true/false value, it will always have a true/false
+ * value.
+ *
+ * <dl>
+ * <dt>reminderNotifyEmail</dt>
+ * <dd>Indicates that the user wishes to receive daily e-mail notifications
+ *     for reminders associated with the shared notebook.  This may be
+ *     true only for business notebooks that belong to the business of
+ *     which the user is a member.  You may only set this value on a
+ *     notebook in your business.</dd>
+ * <dt>reminderNotifyInApp</dt>
+ * <dd>Indicates that the user wishes to receive notifications for
+ *     reminders by applications that support providing such
+ *     notifications.  The exact nature of the notification is defined
+ *     by the individual applications.</dd>
+ * </dl>
+ **/
+struct SharedNotebookRecipientSettings {
+ 1:  optional bool reminderNotifyEmail,
+ 2:  optional bool reminderNotifyInApp
+}
+
+/**
  * Shared notebooks represent a relationship between a notebook and a single
  * share invitation recipient.
  * <dl>
@@ -1716,6 +1756,12 @@ struct SavedSearch {
  *     an authorization token.  This setting expires after the first use
  *     of authenticateToSharedNotebook(...) with a valid authentication
  *     token.</dd>
+ *
+ * <dt>recipientSettings</dt>
+ * <dd>Settings intended for use only by the recipient of this shared
+ *     notebook.  You should skip setting this value unless you want
+ *     to change the value contained inside the structure, and only if
+ *     you are the recipient.</dd>
  * </dl>
  */
 struct SharedNotebook {
@@ -1730,7 +1776,8 @@ struct SharedNotebook {
   8:  optional string shareKey,
   9:  optional string username,
  11:  optional SharedNotebookPrivilegeLevel privilege,
- 12:  optional bool allowPreview
+ 12:  optional bool allowPreview,
+ 13:  optional SharedNotebookRecipientSettings recipientSettings
 }
 
 /**

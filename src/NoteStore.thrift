@@ -747,7 +747,7 @@ struct ClientUsageMetrics {
  * entities.
  *
  * You must specify either <em>noteGuid</em> or <em>plainText</em>, but
- * not both. <em>filter</em> is optional.
+ * not both. <em>filter</em> and <em>referenceUri</em> are optional.
  *
  * <dl>
  * <dt>noteGuid</dt>
@@ -766,12 +766,18 @@ struct ClientUsageMetrics {
  *     Please note that some of the parameters may be ignored, such as
  *     <em>order</em> and <em>ascending</em>.
  * </dd>
+ *
+ * <dt>referenceUri</dt>
+ * <dd>A URI string specifying a reference entity, around which "relatedness"
+ *     should be based. This can be an URL pointing to a web page, for example. 
+ * </dd>
  * </dl>
  */
 struct RelatedQuery {
   1: optional string noteGuid,
   2: optional string plainText,
-  3: optional NoteFilter filter
+  3: optional NoteFilter filter,
+  4: optional string referenceUri
 }
 
 /**
@@ -2645,6 +2651,13 @@ service NoteStore {
    * @throws EDAMNotFoundException <ul>
    *   <li>"Publishing.uri" - not found, by URI</li>
    * </ul>
+   *
+   * @throws EDAMSystemException <ul>
+   *   <li> TAKEN_DOWN "PublicNotebook" - The specified public notebook is
+   *     taken down (for all requesters).</li>
+   *   <li> TAKEN_DOWN "Country" - The specified public notebook is taken
+   *     down for the requester because of an IP-based country lookup.</li>
+   * </ul>
    */
   Types.Notebook getPublicNotebook(1: Types.UserID userId,
                                    2: string publicUri)
@@ -2660,18 +2673,27 @@ service NoteStore {
    * @param sharedNotebook
    *   A shared notebook object populated with the email address of the share
    *   recipient, the notebook guid and the access permissions. All other
-   *   attributes of the shared object are ignored.
+   *   attributes of the shared object are ignored. The SharedNotebook.allowPreview
+   *   field must be explicitly set with either a true or false value.
+   *
    * @return
    *   The fully populated SharedNotebook object including the server assigned
    *   share id and shareKey which can both be used to uniquely identify the
    *   SharedNotebook.
    *
    * @throws EDAMUserException <ul>
-   *   <li>BAD_DATA_FORMAT "SharedNotebook.email" - if the  email was not valid
+   *   <li>BAD_DATA_FORMAT "SharedNotebook.email" - if the email was not valid</li>
+   *   <li>BAD_DATA_FORMAT "requireLogin" - if the SharedNotebook.allowPreview field was
+   *       not set, and the SharedNotebook.requireLogin was also not set or was set to 
+   *       false.</li>
+   *   <li>PERMISSION_DENIED "SharedNotebook.recipientSettings" - if
+   *       recipientSettings is set in the sharedNotebook.  Only the recipient
+   *       can set these values via the setSharedNotebookRecipientSettings
+   *       method.
    *   </li>
    *   </ul>
    * @throws EDAMNotFoundException <ul>
-   *   <li>Notebook.guid - if the notebookGuid is not a valid guid for the user
+   *   <li>Notebook.guid - if the notebookGuid is not a valid GUID for the user.
    *   </li>
    *   </ul>
    */
@@ -2712,6 +2734,42 @@ service NoteStore {
    */
   i32  updateSharedNotebook(1: string authenticationToken,
                             2: Types.SharedNotebook sharedNotebook)
+    throws (1: Errors.EDAMUserException userException,
+            2: Errors.EDAMNotFoundException notFoundException,
+            3: Errors.EDAMSystemException systemException),
+
+  /**
+   * Set values for the recipient settings associated with a shared notebook.  Having
+   * update rights to the shared notebook record itself has no effect on this call;
+   * only the recipient of the shared notebook can can the recipient settings.
+   *
+   * If you do <i>not</i> wish to, or cannot, change one of the reminderNotifyEmail or
+   * reminderNotifyInApp fields, you must leave that field unset in recipientSettings.
+   * This method will skip that field for updates and leave the existing state as
+   * it is.
+   *
+   * @return The update sequence number of the account to which the shared notebook
+   *   belongs, which is the account from which we are sharing a notebook.
+   *
+   * @throws EDAMNotFoundException "sharedNotebookId" - Thrown if the service does not
+   *   have a shared notebook record for the sharedNotebookId on the given shard.  If you
+   *   receive this exception, it is probable that the shared notebook record has
+   *   been revoked or expired, or that you accessed the wrong shard.
+   *
+   * @throws EDAMUserException <ul>
+   *   <li>PEMISSION_DENIED "authenticationToken" - If you do not have permission to set
+   *       the recipient settings for the shared notebook.  Only the recipient has
+   *       permission to do this.
+   *   <li>DATA_CONFLICT "recipientSettings.reminderNotifyEmail" - Setting whether
+   *       or not you want to receive reminder e-mail notifications is possible on
+   *       a business notebook in the business to which the user belongs.  All
+   *       others can safely unset the reminderNotifyEmail field from the
+   *       recipientSettings parameter.
+   * </ul>
+   */
+  i32 setSharedNotebookRecipientSettings(1: string authenticationToken,
+                                         2: i64 sharedNotebookId,
+                                         3: Types.SharedNotebookRecipientSettings recipientSettings)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMNotFoundException notFoundException,
             3: Errors.EDAMSystemException systemException),
@@ -3075,9 +3133,17 @@ service NoteStore {
    *   The 'noteKey' identifier from the Note that was originally created via
    *   a call to shareNote() and then given to a recipient to access.
    *
+   * @param authenticationToken
+   *   An optional authenticationToken that identifies the user accessing the
+   *   shared note. This parameter may be required to access some shared notes.
+   *
    * @throws EDAMUserException <ul>
    *   <li> PERMISSION_DENIED "Note" - the Note with that GUID is either not
    *     shared, or the noteKey doesn't match the current key for this note
+   *   </li>
+   *   <li> PERMISSION_DENIED "authenticationToken" - an authentication token is
+   *     required to access this Note, but either no authentication token or a
+   *     "non-owner" authentication token was provided.
    *   </li>
    * </ul>
    *
@@ -3085,10 +3151,20 @@ service NoteStore {
    *   <li> "guid" - the note with that GUID is not found
    *   </li>
    * </ul>
+   *
+   * @throws EDAMSystemException <ul>
+   *   <li> TAKEN_DOWN "Note" - The specified shared note is taken down (for
+   *     all requesters).
+   *   </li>
+   *   <li> TAKEN_DOWN "Country" - The specified shared note is taken down
+   *     for the requester because of an IP-based country lookup.
+   *   </ul>
+   * </ul>
    */
   UserStore.AuthenticationResult
     authenticateToSharedNote(1: string guid,
-                             2: string noteKey)
+                             2: string noteKey,
+                             3: string authenticationToken)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMNotFoundException notFoundException,
             3: Errors.EDAMSystemException systemException),

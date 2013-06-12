@@ -54,7 +54,7 @@ const i16 EDAM_VERSION_MAJOR = 1
  * Clients pass this to the service using UserStore.checkVersion at the
  * beginning of a session to confirm that they are not out of date.
  */
-const i16 EDAM_VERSION_MINOR = 24
+const i16 EDAM_VERSION_MINOR = 25
 
 //============================= Enumerations ==================================
 
@@ -153,6 +153,23 @@ struct PublicUserInfo {
  *   end of this string to construct the full URL, as documented on our
  *   developer web site.
  *   </dd>
+ * <dt>secondFactorRequired:</dt>
+ *   <dd>
+ *   If set to true, this field indicates that the user has enabled two-factor
+ *   authentication and must enter their second factor in order to complete 
+ *   authentication. In this case the value of authenticationResult will be
+ *   a short-lived authentication token that may only be used to make a 
+ *   subsequent call to completeTwoFactorAuthentication. 
+ *   </dd>
+ * <dt>secondFactorDeliveryHint:</dt>
+ *   <dd>
+ *   When secondFactorRequired is set to true, this field may contain a string
+ *   describing the second factor delivery method that the user has configured. 
+ *   This will typically be an obfuscated mobile device number, such as 
+ *   "(xxx) xxx-x095". This string can be displayed to the user to remind them
+ *   how to obtain the required second factor.
+ *   TODO do we need to differentiate between SMS and voice delivery? 
+ *   </dd>
  * </dl>
  */
 struct AuthenticationResult {
@@ -162,7 +179,9 @@ struct AuthenticationResult {
   4:  optional Types.User user,
   5:  optional PublicUserInfo publicUserInfo,
   6:  optional string noteStoreUrl,
-  7:  optional string webApiUrlPrefix
+  7:  optional string webApiUrlPrefix,
+  8:  optional bool secondFactorRequired,
+  9:  optional string secondFactorDeliveryHint
 }
 
 /**
@@ -363,10 +382,21 @@ service UserStore {
    *   The "consumer secret" portion of the API key issued to the client application
    *   by Evernote.
    *
+   * @param supportsTwoFactor
+   *   Whether the calling application supports two-factor authentication. If this
+   *   parameter is false, this method will fail with the error code INVALID_AUTH and the
+   *   parameter "password" when called for a user who has enabled two-factor
+   *   authentication.
+   *
    * @return
    *   <p>The result of the authentication.  If the authentication was successful,
    *   the AuthenticationResult.user field will be set with the full information
    *   about the User.</p>
+   *   <p>If the user has two-factor authentication enabled,
+   *   AuthenticationResult.secondFactorRequired will be set and
+   *   AuthenticationResult.authenticationToken will contain a short-lived token
+   *   that may only be used to complete the two-factor authentication process by calling
+   *   UserStore.completeTwoFactorAuthentication.</p>
    *
    * @throws EDAMUserException <ul>
    *   <li> DATA_REQUIRED "username" - username is empty
@@ -384,7 +414,8 @@ service UserStore {
   AuthenticationResult authenticate(1: string username,
                                     2: string password,
                                     3: string consumerKey,
-                                    4: string consumerSecret)
+                                    4: string consumerSecret,
+                                    5: bool supportsTwoFactor)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMSystemException systemException),
 
@@ -439,10 +470,21 @@ service UserStore {
    *   EDAM_DEVICE_DESCRIPTION_LEN_MAX characters long and must match the regular 
    *   expression EDAM_DEVICE_DESCRIPTION_REGEX.
    *
+   * @param supportsTwoFactor
+   *   Whether the calling application supports two-factor authentication. If this
+   *   parameter is false, this method will fail with the error code INVALID_AUTH and the
+   *   parameter "password" when called for a user who has enabled two-factor
+   *   authentication.
+   *
    * @return
    *   <p>The result of the authentication. The level of detail provided in the returned
    *   AuthenticationResult.User structure depends on the access level granted by 
    *   calling application's API key.</p>
+   *   <p>If the user has two-factor authentication enabled,
+   *   AuthenticationResult.secondFactorRequired will be set and
+   *   AuthenticationResult.authenticationToken will contain a short-lived token
+   *   that may only be used to complete the two-factor authentication process by calling
+   *   UserStore.completeTwoFactorAuthentication.</p>
    *
    * @throws EDAMUserException <ul>
    *   <li> DATA_REQUIRED "username" - username is empty
@@ -466,7 +508,52 @@ service UserStore {
                                                3: string consumerKey,
                                                4: string consumerSecret,
                                                5: string deviceIdentifier,
-                                               6: string deviceDescription)
+                                               6: string deviceDescription,
+                                               7: bool supportsTwoFactor)
+    throws (1: Errors.EDAMUserException userException,
+            2: Errors.EDAMSystemException systemException),
+
+  /**
+   * Complete the authentication process when a second factor is required. This
+   * call is made after a successful call to authenticate or authenticateLongSession
+   * when the authenticating user has enabled two-factor authentication.
+   *
+   * @param authenticationToken An authentication token returned by a previous
+   *   call to UserStore.authenticate or UserStore.authenticateLongSession that
+   *   could not be completed in a single call because a second factor was required.
+   *
+   * @param oneTimeCode The one time code entered by the user. This value is delivered
+   *   out-of-band, typically via SMS or an authenticator application.
+   *
+   * @param deviceIdentifier See the corresponding parameter in authenticateLongSession.
+   *
+   * @param deviceDescription See the corresponding parameter in authenticateLongSession.
+   *
+   * @return
+   *   The result of the authentication. The level of detail provided in the returned
+   *   AuthenticationResult.User structure depends on the access level granted by the
+   *   calling application's API key. If the initial authentication call was made to
+   *   authenticateLongSession, the AuthenticationResult will contain a long-lived
+   *   authentication token.
+   *
+   * @throws EDAMUserException <ul>
+   *   <li> DATA_REQUIRED "authenticationToken" - authenticationToken is empty
+   *   <li> DATA_REQUIRED "oneTimeCode" - oneTimeCode is empty
+   *   <li> BAD_DATA_FORMAT "authenticationToken" - authenticationToken is not well formed
+   *   <li> INVALID_AUTH "oneTimeCode" - oneTimeCode did not match
+   *   <li> AUTH_EXPIRED "authenticationToken" - authenticationToken has expired
+   *   <li> PERMISSION_DENIED "authenticationToken" - authenticationToken is not valid
+   *   <li> PERMISSION_DENIED "User.active" - user account is closed
+   *   <li> PERMISSION_DENIED "User.tooManyFailuresTryAgainLater" - user has
+   *     failed authentication too often
+   *   <li> DATA_CONFLICT "User.twoFactorAuthentication" - The user has not enabled
+   *      two-factor authentication.</li>
+   * </ul>
+   */
+  AuthenticationResult completeTwoFactorAuthentication(1: string authenticationToken,
+                                                       2: string oneTimeCode,
+                                                       3: string deviceIdentifier,
+                                                       4: string deviceDescription)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMSystemException systemException),
 
@@ -591,5 +678,4 @@ service UserStore {
   string getNoteStoreUrl(1: string authenticationToken)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMSystemException systemException)
-
 }
