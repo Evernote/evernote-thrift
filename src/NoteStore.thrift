@@ -2775,45 +2775,6 @@ service NoteStore {
             3: Errors.EDAMSystemException systemException),
 
   /**
-   * Send a reminder message to some or all of the email addresses that a notebook has been
-   * shared with. The message includes the current link to view the notebook.
-   * @param authenticationToken
-   *   The auth token of the user with permissions to share the notebook
-   * @param notebookGuid
-   *   The guid of the shared notebook
-   * @param messageText
-   *  User provided text to include in the email
-   * @param recipients
-   *  The email addresses of the recipients. If this list is empty then all of the
-   *  users that the notebook has been shared with are emailed.
-   *  If an email address doesn't correspond to share invite members then that address
-   *  is ignored.
-   * @return
-   *  The number of messages sent
-   * @throws EDAMUserException <ul>
-   *   <li> LIMIT_REACHED "(recipients)" -
-   *     The email can't be sent because this would exceed the user's daily
-   *     email limit.
-   *   </li>
-   *   <li> PERMISSION_DENIED "Notebook.guid" - The user doesn't have permission to
-   *     send a message for the specified notebook.
-   *   </li>
-   * </ul>
-   *
-   * @throws EDAMNotFoundException <ul>
-   *   <li> "Notebook.guid" - not found, by GUID
-   *   </li>
-   * </ul>
-    */
-  i32 sendMessageToSharedNotebookMembers(1: string authenticationToken,
-                                          2: Types.Guid notebookGuid,
-                                          3: string messageText,
-                                          4: list<string> recipients)
-    throws (1: Errors.EDAMUserException userException,
-            2: Errors.EDAMNotFoundException notFoundException,
-            3: Errors.EDAMSystemException systemException),
-
-  /**
    * Lists the collection of shared notebooks for all notebooks in the
    * users account.
    *
