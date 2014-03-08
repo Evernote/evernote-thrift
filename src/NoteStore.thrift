@@ -865,7 +865,7 @@ struct RelatedResultSpec {
   5: optional bool includeContainingNotebooks
 }
 
-/*
+/**
  * Service:  NoteStore
  * <p>
  * The NoteStore service is used by EDAM clients to exchange information
