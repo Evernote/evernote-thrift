@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2013 Evernote Corporation.
+ * Copyright 2007-2016 Evernote Corporation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -46,6 +46,19 @@ namespace perl EDAMTypes
 // =============================== typedefs ====================================
 
 /**
+ * A monotonically incrementing number on each shard that identifies a cross shard
+ * cache invalidation event.
+ */
+typedef i64 InvalidationSequenceNumber
+
+
+/**
+ * A type alias for the primary identifiers for Identity objects.
+ */
+typedef i64 IdentityID
+
+
+/**
  * Every Evernote account is assigned a unique numeric identifier which
  * will not change for the life of the account.  This is independent of
  * the (string-based) "username" which is known by the user for login
@@ -86,6 +99,16 @@ typedef string Guid
  */
 typedef i64 Timestamp
 
+/**
+ * A sequence number for the MessageStore subsystem.
+ */
+typedef i64 MessageEventID
+
+/**
+ * A type alias for the primary identifiers for MessageThread objects.
+ */
+typedef i64 MessageThreadID
+
 // ============================= Enumerations ==================================
 
 /**
@@ -100,6 +123,15 @@ enum PrivilegeLevel {
   MANAGER = 7,
   SUPPORT = 8,
   ADMIN = 9
+}
+
+/**
+ * This enumeration defines the possible tiers of service that a user may have.
+ */
+enum ServiceLevel {
+  BASIC = 1,
+  PLUS = 2,
+  PREMIUM = 3
 }
 
 /**
@@ -158,8 +190,14 @@ enum PremiumOrderStatus {
 /**
  * Privilege levels for accessing shared notebooks.
  *
+ * Note that as of 2014-04, FULL_ACCESS is synonymous with BUSINESS_FULL_ACCESS.  If a
+ * user is a member of a business and has FULL_ACCESS privileges, then they will
+ * automatically be granted BUSINESS_FULL_ACCESS for notebooks in their business.  This
+ * will happen implicitly when they attempt to access the corresponding notebooks of
+ * the business.  BUSINESS_FULL_ACCESS is therefore deprecated.
+ *
  * READ_NOTEBOOK: Recipient is able to read the contents of the shared notebook
- *   but does to have access to information about other recipients of the
+ *   but does not have access to information about other recipients of the
  *   notebook or the activity stream information.
  *
  * MODIFY_NOTEBOOK_PLUS_ACTIVITY: Recipient has rights to read and modify the contents
@@ -176,13 +214,13 @@ enum PremiumOrderStatus {
  *
  * FULL_ACCESS: Recipient has full rights to the shared notebook and recipient lists,
  *   including privilege to revoke and create invitations and to change privilege
- *   levels on invitations for individuals.  This privilege level is primarily intended
- *   for use by individual shares.
+ *   levels on invitations for individuals.  For members of a business, FULL_ACCESS
+ *   privilege on business notebooks also grants the ability to change how the notebook
+ *   will appear when shared with the business, including the rights to share and
+ *   unshare the notebook with the business.
  *
- * BUSINESS_FULL_ACCESS: Intended for use with Business Notebooks, a
- * BUSINESS_FULL_ACCESS level is FULL_ACCESS with the additional rights to
- * change how the notebook will appear in the business library, including the
- * rights to publish and unpublish the notebook from the library.
+ * BUSINESS_FULL_ACCESS: Deprecated.  See the note above about BUSINESS_FULL_ACCESS and
+ *   FULL_ACCESS being synonymous.
  */
 enum SharedNotebookPrivilegeLevel {
   READ_NOTEBOOK                  = 0,
@@ -191,6 +229,26 @@ enum SharedNotebookPrivilegeLevel {
   GROUP                          = 3,
   FULL_ACCESS                    = 4,
   BUSINESS_FULL_ACCESS           = 5
+}
+
+/**
+ * Privilege levels for accessing a shared note. All privilege levels convey "activity feed" access,
+ * which allows the recipient to access information about other recipients and the activity stream.
+ *
+ * READ_NOTE: Recipient has rights to read the shared note.
+ *
+ * MODIFY_NOTE: Recipient has all of the rights of READ_NOTE, plus rights to modify the shared
+ *   note's content, title and resources. Other fields, including the notebook, tags and metadata,
+ *   may not be modified.
+ *
+ * FULL_ACCESS: Recipient has all of the rights of MODIFY_NOTE, plus rights to share the note with
+ *   other users via email, public note links, and note sharing. Recipient may also update and
+ *   remove other recipient's note sharing rights.
+ */
+enum SharedNotePrivilegeLevel {
+  READ_NOTE = 0,
+  MODIFY_NOTE = 1,
+  FULL_ACCESS = 2
 }
 
 /**
@@ -225,17 +283,22 @@ enum BusinessUserRole {
  * instances that are valid for a given operation, as used, for example, in
  * NotebookRestrictions.
  *
- * ONLY_JOINED_OR_PREVIEW: The domain consists of shared notebooks that
- *   "belong" to the recipient or still available for preview by any recipient.
- *   Shared notebooks that the recipient has joined (the username has already been
- *   assigned to our user) are in the domain.  Additionally, shared notebooks
- *   that allow preview and have not yet been joined are in the domain.
+ * ASSIGNED: The domain consists of shared notebooks that belong, or are assigned,
+ * to the recipient.
  *
  * NO_SHARED_NOTEBOOKS: No shared notebooks are applicable to the operation.
  */
 enum SharedNotebookInstanceRestrictions {
-  ONLY_JOINED_OR_PREVIEW = 1,
-  NO_SHARED_NOTEBOOKS    = 2   // most restrictive
+  /*
+   * originally had the name ONLY_JOINED_OR_PREVIEW and was renamed after the
+   * allowPreview feature was removed.
+   */
+  ASSIGNED = 1,
+
+  /*
+   * most restrictive
+   */
+  NO_SHARED_NOTEBOOKS = 2
 }
 
 /**
@@ -252,6 +315,38 @@ enum ReminderEmailConfig {
   DO_NOT_SEND      = 1,
   SEND_DAILY_EMAIL = 2
 }
+
+/**
+ * An enumeration defining the possible states of a BusinessInvitation.
+ *
+ * APPROVED: The invitation was created or approved by a business admin and may be redeemed by the
+ *   invited email.
+ *
+ * REQUESTED: The invitation was requested by a non-admin member of the business and must be
+ *   approved by an admin before it may be redeemed. Invitations in this state do not count
+ *   against a business' seat limit.
+ *
+ * REDEEMED: The invitation has already been redeemed. Invitations in this state do not count
+ *   against a business' seat limit.
+ */
+enum BusinessInvitationStatus {
+  APPROVED = 0,
+  REQUESTED = 1,
+  REDEEMED = 2
+}
+
+/**
+ * What kinds of Contacts does the Evernote service know about?
+ */
+enum ContactType {
+  EVERNOTE = 1,
+  SMS = 2,
+  FACEBOOK = 3,
+  EMAIL = 4,
+  TWITTER = 5,
+  LINKEDIN = 6,
+}
+
 
 // ============================== Constants ===================================
 
@@ -278,6 +373,12 @@ const string CLASSIFICATION_RECIPE_SERVICE_RECIPE = "002";
  * were clipped from the web in some manner.
  */
 const string EDAM_NOTE_SOURCE_WEB_CLIP = "web.clip";
+
+/**
+ * Standardized value for the 'source' NoteAttribute for notes that
+ * were clipped using the "simplified article" function of the clipper.
+ */
+const string EDAM_NOTE_SOURCE_WEB_CLIP_SIMPLIFIED = "Clearly";
 
 /**
  * Standardized value for the 'source' NoteAttribute for notes that
@@ -490,10 +591,6 @@ struct Data {
  *       account owner's settings page
  *   </dd>
  *
- * <dt>taxExempt</dt>
- *   <dd>A flag indicating the user's sponsored group is exempt from sale tax
- *   </dd>
- *
  * <dt>useEmailAutoFiling</dt>
  *   <dd>A flag indicating whether the user chooses to allow Evernote to automatically
  *       file and tag emailed notes
@@ -506,7 +603,23 @@ struct Data {
  *       notes in the user's business notebooks that the user has configured for
  *       e-mail notifications.
  *   </dd>
- * </dl>
+ *
+ * <dt>emailAddressLastConfirmed</dt>
+ *   <dd>If set, this contains the time at which the user last confirmed that the
+ *       configured email address for this account is correct and up-to-date. If this is
+ *       unset that indicates that the user's email address is unverified.
+ *   </dd>
+ *
+ * <dt>passwordUpdated</dt>
+ *   <dd>If set, this contains the time at which the user's password last changed. This
+ *       will be unset for users created before the addition of this field who have not
+ *       changed their passwords since the addition of this field.
+ *   </dd>
+ *
+ * <dt>shouldLogClientEvent/dt>
+ *   </dd>If set to True, the server will record LogRequest send from clients of this
+ *        user as ClientEventLog.
+ *   </dl>
  */
 struct UserAttributes {
   1:  optional  string defaultLocationName,
@@ -537,23 +650,57 @@ struct UserAttributes {
   29: optional  bool educationalDiscount,
   30: optional  string businessAddress,
   31: optional  bool hideSponsorBilling,
-  32: optional  bool taxExempt,
   33: optional  bool useEmailAutoFiling,
-  34: optional  ReminderEmailConfig reminderEmailConfig
+  34: optional  ReminderEmailConfig reminderEmailConfig,
+  35: optional  Timestamp emailAddressLastConfirmed,
+  36: optional  Timestamp passwordUpdated,
+  37: optional  bool salesforcePushEnabled,
+  38: optional  bool shouldLogClientEvent
+}
+
+/**
+ * A structure holding the optional attributes associated with users
+ * in a business.
+ *
+ * <dl>
+ *  <dt>title</dt>
+ *  <dd>Free form text of this user's title in the business</dd>
+ *
+ *  <dt>location</dt>
+ *  <dd>City, State (for US) or City / Province for other countries</dd>
+ *
+ *  <dt>department</dt>
+ *  <dd>Free form text of the department this user belongs to.</dd>
+ *
+ *  <dt>mobilePhone</dt>
+ *  <dd>User's mobile phone number. Stored as plain text without any formatting.</dd>
+ *
+ *  <dt>linkedInProfileUrl</dt>
+ *  <dd>URL to user's public LinkedIn profile page. This should only contain
+ *  the portion relative to the base LinkedIn URL. For example: "/pub/john-smith/".
+ *  </dd>
+ *
+ *  <dt>workPhone</dt>
+ *  <dd>User's work phone number. Stored as plain text without any formatting.</dd>
+ *
+ *  <dt>companyStartDate</dt>
+ *  <dd>The date on which the user started working at their company.</dd>
+ * </dl>
+ */
+struct BusinessUserAttributes {
+  1: optional string title,
+  2: optional string location,
+  3: optional string department,
+  4: optional string mobilePhone,
+  5: optional string linkedInProfileUrl,
+  6: optional string workPhone,
+  7: optional Timestamp companyStartDate
 }
 
 /**
  * This represents the bookkeeping information for the user's subscription.
  *
  *<dl>
- * <dt>uploadLimit</dt>
- *   <dd>The number of bytes that can be uploaded to the account
- *   in the current month.  For new notes that are created, this is the length
- *   of the note content (in Unicode characters) plus the size of each resource
- *   (in bytes).  For edited notes, this is the the difference between the old
- *   length and the new length (if this is greater than 0) plus the size of
- *   each new resource.
- *   </dd>
  * <dt>uploadLimitEnd</dt>
  *   <dd>The date and time when the current upload limit
  *   expires.  At this time, the monthly upload count reverts to 0 and a new
@@ -625,13 +772,14 @@ struct UserAttributes {
  * <dt>businessRole</dt>
  *   <dd><i>DEPRECATED:</i>See BusinessUserInfo.</dd>
  * <dt>unitDiscount</dt>
- *   <dd>discount per seat in negative amount and smallest unit of the currency (e.g. cents for USD)</dd>
+ *   <dd>discount per seat in negative amount and smallest unit of the currency (e.g.
+ *       cents for USD)</dd>
  * <dt>nextChargeDate</dt>
- *   <dd>The next time the user will be charged, may or may not be the same as nextPaymentDue</dd>
+ *   <dd>The next time the user will be charged, may or may not be the same as
+ *       nextPaymentDue</dd>
  * </dl>
  */
 struct Accounting {
-  1:  optional  i64                uploadLimit,
   2:  optional  Timestamp          uploadLimitEnd,
   3:  optional  i64                uploadLimitNextMonth,
   4:  optional  PremiumOrderStatus premiumServiceStatus,
@@ -653,7 +801,8 @@ struct Accounting {
   21: optional  string             businessName,
   22: optional  BusinessUserRole   businessRole,
   23: optional  i32                unitDiscount,
-  24: optional  Timestamp          nextChargeDate
+  24: optional  Timestamp          nextChargeDate,
+  25: optional  i32                availablePoints
 }
 
 /**
@@ -676,80 +825,73 @@ struct Accounting {
  *       your business, etc.  The business e-mail cannot be used for identification
  *       purposes such as for logging into the service.
  *   </dd>
+ * <dt>updated</dt>
+ *   <dd>Last time the business user or business user attributes were updated.</dd>
  * </dl>
  */
 struct BusinessUserInfo {
   1:  optional  i32              businessId,
   2:  optional  string           businessName,
   3:  optional  BusinessUserRole role,
-  4:  optional  string           email
+  4:  optional  string           email,
+  5:  optional  Timestamp        updated
 }
 
 /**
- * This structure is used to provide information about a user's Premium account.
+ * This structure is used to provide account limits that are in effect for this user.
  *<dl>
- * <dt>currentTime</dt>
- *   <dd>
- *   The server-side date and time when this data was generated.
+ * <dt>userMailLimitDaily</dt>
+ *   <dd>The number of emails of any type that can be sent by a user from the
+ *       service per day.  If an email is sent to two different recipients, this
+ *       counts as two emails.
  *   </dd>
- * <dt>premium</dt>
- *   <dd>
- *   True if the user's account is Premium.
+ * <dt>noteSizeMax</dt>
+ *   <dd>Maximum total size of a Note that can be added.  The size of a note is
+ *       calculated as:
+ *       ENML content length (in Unicode characters) plus the sum of all resource
+ *       sizes (in bytes).
  *   </dd>
- * <dt>premiumRecurring</dt>
- *   <dd>
- *   True if the user's account is Premium and has a recurring payment method.
+ * <dt>resourceSizeMax</dt>
+ *   <dd>Maximum size of a resource, in bytes
  *   </dd>
- * <dt>premiumExpirationDate</dt>
- *   <dd>
- *   The date when the user's Premium account expires, or the date when the
- *   user's account is due for payment if it has a recurring payment method.
+ * <dt>userLinkedNotebookMax</dt>
+ *   <dd>Maximum number of linked notebooks per account.
  *   </dd>
- * <dt>premiumExtendable</dt>
- *   <dd>
- *   True if the user is eligible for purchasing Premium account extensions.
+ * <dt>uploadLimit</dt>
+ *   <dd>The number of bytes that can be uploaded to the account
+ *   in the current month.  For new notes that are created, this is the length
+ *   of the note content (in Unicode characters) plus the size of each resource
+ *   (in bytes).  For edited notes, this is the the difference between the old
+ *   length and the new length (if this is greater than 0) plus the size of
+ *   each new resource.
  *   </dd>
- * <dt>premiumPending</dt>
- *   <dd>
- *   True if the user's Premium account is pending payment confirmation
- *   </dd>
- * <dt>premiumCancellationPending</dt>
- *   <dd>
- *   True if the user has requested that no further charges to be made; the
- *   Premium account will remain active until it expires.
- *   </dd>
- * <dt>canPurchaseUploadAllowance</dt>
- *   <dd>
- *   True if the user is eligible for purchasing additional upload allowance.
- *   </dd>
- * <dt>sponsoredGroupName</dt>
- *   <dd>
- *   The name of the sponsored group that the user is part of.
- *   </dd>
- * <dt>sponsoredGroupRole</dt>
- *   <dd>
- *   DEPRECATED - will be removed in a future update.
- *   </dd>
- * <dt>premiumUpgradable</dt>
- *   <dd>
- *   True if the user is eligible for purchasing Premium account upgrade.
- *   </dd>
+ * <dt>userNoteCountMax</dt>
+ *   <dd>Maximum number of Notes per user</dd>
+ * <dt>userNotebookCountMax</dt>
+ *   <dd>Maximum number of Notebooks per user</dd>
+ * <dt>userTagCountMax</dt>
+ *   <dd>Maximum number of Tags per account</dd>
+ * <dt>noteTagCountMax</dt>
+ *   <dd>Maximum number of Tags per Note</dd>
+ * <dt>userSavedSearchesMax</dt>
+ *   <dd>Maximum number of SavedSearches per account</dd>
+ * <dt>noteResourceCountMax</dt>
+ *   <dd>The maximum number of Resources per Note</dd>
  * </dl>
  */
-struct PremiumInfo {
-  1:  required Timestamp currentTime,
-  2:  required bool premium,
-  3:  required bool premiumRecurring,
-  4:  optional Timestamp premiumExpirationDate,
-  5:  required bool premiumExtendable,
-  6:  required bool premiumPending,
-  7:  required bool premiumCancellationPending,
-  8:  required bool canPurchaseUploadAllowance,
-  9:  optional string sponsoredGroupName,
-  10: optional SponsoredGroupRole sponsoredGroupRole,
-  11: optional bool premiumUpgradable
+struct AccountLimits {
+  1:  optional i32 userMailLimitDaily,
+  2:  optional i64 noteSizeMax,
+  3:  optional i64 resourceSizeMax,
+  4:  optional i32 userLinkedNotebookMax,
+  5:  optional i64 uploadLimit,
+  6:  optional i32 userNoteCountMax,
+  7:  optional i32 userNotebookCountMax,
+  8:  optional i32 userTagCountMax,
+  9:  optional i32 noteTagCountMax,
+  10: optional i32 userSavedSearchesMax,
+  11: optional i32 noteResourceCountMax
 }
-
 
 /**
  * This represents the information about a single user account.
@@ -804,8 +946,9 @@ struct PremiumInfo {
  *   Regex:  EDAM_TIMEZONE_REGEX
  *   </dd>
  *
- * <dt>privilege</dt>
- *   <dd>The level of access permitted for the user.
+ * <dt>serviceLevel</dt>
+ *   <dd>The level of service the user currently receives. This will always be populated
+ *       for users retrieved from the Evernote service.
  *   </dd>
  *
  * <dt>created</dt>
@@ -842,17 +985,25 @@ struct PremiumInfo {
  *   <dd>Bookkeeping information for the user's subscription.
  *   </dd>
  *
- * <dt>premiumInfo</dt>
- *   <dd>If present, this will contain a set of commerce information
- *   relating to the user's premium service level.
- *   </dd>
- *
  * <dt>businessUserInfo</dt>
  *   <dd>If present, this will contain a set of business information
  *   relating to the user's business membership.  If not present, the
  *   user is not currently part of a business.
  *   </dd>
- * </dl>
+ *
+ * <dt>photoUrl</dt>
+ *   <dd>The URL of the photo that represents this User. This field is filled in by the
+ *   service and is read-only to clients. If <code>photoLastUpdated</code> is
+ *   not set, this url will point to a placeholder user photo generated by the
+ *   service.</dd>
+ *
+ * <dt>photoLastUpdated</dt>
+ *   <dd>The time at which the photo at 'photoUrl' was last updated by this User. This
+ *   field will be null if the User never set a profile photo. This field is filled in by
+ *   the service and is read-only to clients.</dd>
+ *
+ * <dt>accountLimits</dt>
+ *   <dd>Account limits applicable for this user.</dd>
  */
 struct User {
   1:  optional  UserID id,
@@ -861,6 +1012,7 @@ struct User {
   4:  optional  string name,
   6:  optional  string timezone,
   7:  optional  PrivilegeLevel privilege,
+  21: optional  ServiceLevel serviceLevel,
   9:  optional  Timestamp created,
   10: optional  Timestamp updated,
   11: optional  Timestamp deleted,
@@ -868,10 +1020,130 @@ struct User {
   14: optional  string shardId,
   15: optional  UserAttributes attributes,
   16: optional  Accounting accounting,
-  17: optional  PremiumInfo premiumInfo,
-  18: optional  BusinessUserInfo businessUserInfo
+  18: optional  BusinessUserInfo businessUserInfo,
+  19: optional  string photoUrl,
+  20: optional  Timestamp photoLastUpdated,
+  22: optional  AccountLimits accountLimits
 }
 
+
+/**
+ * A structure that represents contact information. Note this does not necessarily correspond to
+ * an Evernote user.
+ *
+ * <dl>
+ * <dt>name</dt>
+ * <dd>The displayable name of this contact. This field is filled in by the service and
+ *     is read-only to clients.
+ * </dd>
+ * <dt>id</dt>
+ * <dd>A unique identifier for this ContactType.
+ * </dd>
+ * <dt>type</dt>
+ * <dd>What service does this contact come from?
+ * </dd>
+ * <dt>photoUrl</dt>
+ * <dd>A URL of a profile photo representing this Contact. This field is filled in by the
+ *     service and is read-only to clients.
+ * </dd>
+ * <dt>photoLastUpdated</dt>
+ * <dd>timestamp when the profile photo at 'photoUrl' was last updated.
+ *     This field will be null if the user has never set a profile photo.
+ *     This field is filled in by the service and is read-only to clients.
+ * </dd>
+ * <dt>messagingPermit</dt>
+ * <dd>This field will only be filled by the service when it is giving a Contact record
+ *     to a client, and that client does not normally have enough permission to send a
+ *     new message to the person represented through this Contact. In that case, this
+ *     whole Contact record could be used to send a new Message to the Contact, and the
+ *     service will inspect this permit to confirm that operation was allowed.
+ * </dd>
+ * <dt>messagingPermitExpires</dt>
+ * <dd>If this field is set, then this (whole) Contact record may be used in calls to
+ *     sendMessage until this time. After that time, those calls may be rejected by the
+ *     service if the caller does not have direct permission to initiate a message with
+ *     the represented Evernote user.
+ * </dd>
+ * </dl>
+ */
+struct Contact {
+  1: optional string name,
+  2: optional string id,
+  3: optional ContactType type,
+  4: optional string photoUrl,
+  5: optional Timestamp photoLastUpdated,
+  6: optional binary messagingPermit,
+  7: optional Timestamp messagingPermitExpires
+}
+
+/**
+ * An object that represents the relationship between a Contact that possibly
+ * belongs to an Evernote User.
+ *
+ * <dl>
+ *  <dt>id</dt>
+ *  <dd>The unique identifier for this mapping.
+ *  </dd>
+ *
+ *  <dt>contact<dt>
+ *  <dd>The Contact that can be used to address this Identity. May be unset.
+ *  </dd>
+ *
+ *  <dt>userId</dt>
+ *  <dd>The Evernote User id that is connected to the Contact. May be unset
+ *      if this identity has not yet been claimed, or the caller is not
+ *      connected to this identity.
+ *  </dd>
+ *
+ *  <dt>deactivated</dt>
+ *  <dd>Indicates that the contact for this identity is no longer active and
+ *  should not be used when creating new threads using Destination.recipients,
+ *  unless you know of another Identity instance with the same contact information
+ *  that is active.  If you are connected to the user (see userConnected), you
+ *  can still create threads using their Evernote-type contact.</dd>
+ *
+ *  <dt>sameBusiness</dt>
+ *  <dd>Does this Identity belong to someone who is in the same business as the
+ *      caller?
+ *  </dd>
+ *
+ *  <dt>blocked</dt>
+ *  <dd>Has the caller blocked the Evernote user this Identity represents?
+ *  </dd>
+ *
+ *  <dt>userConnected</dt>
+ *  <dd>Indicates that the caller is "connected" to the user of this
+ *  identity via this identity.  When you have a connection via an
+ *  identity, you should always create new threads using the
+ *  Evernote-type contact (see ContactType) using the userId field
+ *  from a connected Identity.  On the Evernote service, the
+ *  Evernote-type contact is the most durable. Phone numbers and
+ *  e-mail addresses can get re-assigned but your Evernote account
+ *  user ID will remain the same.  A connection exists when both of
+ *  you are in the same business or the user has replied to a thread
+ *  that you are on.  When connected, you will also get to see more
+ *  information about the user who has claimed the identity.  Note
+ *  that you are never connected to yourself since you won't be
+ *  sending messages to yourself, but you will obviously see your own
+ *  profile information.
+ *  </dd>
+ *
+ *  <dt>eventId</dt>
+ *  <dd>A server-assigned sequence number for the events in the messages
+ *  subsystem.
+ *  </dd>
+ * </dl>
+ */
+struct Identity {
+  1: required IdentityID id,
+  2: optional Contact contact,
+  3: optional UserID userId,
+  4: optional bool deactivated,
+  5: optional bool sameBusiness,
+  6: optional bool blocked,
+  7: optional bool userConnected,
+  8: optional MessageEventID eventId
+}
 
 /**
  * A tag within a user's account is a unique name which may be organized
@@ -1325,6 +1597,36 @@ struct Resource {
  * Evernote service. The key is the string name of the classification type,
  * and the value is a constant that begins with CLASSIFICATION_.</dd>
  *
+ * <dt>sharedWithBusiness</dt>
+ * <dd>When this flag is set on a business note, any user in that business
+ * may view the note if they request it by GUID. This field is read-only by
+ * clients. The server will ignore all values set by clients into this field.
+ *
+ * To share a note with the business, use NoteStore.shareNoteWithBusiness and
+ * to stop sharing a note with the business, use NoteStore.stopSharingNoteWithBusiness.
+ * </dd>
+ *
+ * <dt>conflictSourceNoteGuid</dt>
+ * <dd>If set, this specifies the GUID of a note that caused a sync conflict
+ * resulting in the creation of a duplicate note. The duplicated note contains
+ * the user's changes that could not be applied as a result of the sync conflict,
+ * and uses the conflictSourceNoteGuid field to specify the note that caused the
+ * conflict. This allows clients to provide a customized user experience for note
+ * conflicts.
+ * </dd>
+ *
+ * <dt>noteTitleQuality</dt>
+ * <dd>If set, this specifies that the note's title was automatically generated
+ * and indicates the likelihood that the generated title is useful for display to
+ * the user. If not set, the note's title was manually entered by the user.
+ *
+ * Clients MUST set this attribute to one of the following values when the
+ * corresponding note's title was not manually entered by the user:
+ * EDAM_NOTE_TITLE_QUALITY_UNTITLED, EDAM_NOTE_TITLE_QUALITY_LOW,
+ * EDAM_NOTE_TITLE_QUALITY_MEDIUM or EDAM_NOTE_TITLE_QUALITY_HIGH.
+ *
+ * When a user edits a note's title, clients MUST unset this value.
+ * </dd>
  * </dl>
  */
 struct NoteAttributes {
@@ -1346,9 +1648,129 @@ struct NoteAttributes {
   24: optional  string lastEditedBy,
   26: optional  map<string, string> classifications,
   27: optional  UserID creatorId,
-  28: optional  UserID lastEditorId
+  28: optional  UserID lastEditorId,
+  29: optional  bool sharedWithBusiness,
+  30: optional  Guid conflictSourceNoteGuid,
+  31: optional  i32 noteTitleQuality
 }
 
+
+/**
+ * Represents a relationship between a note and a single share invitation recipient. The recipient
+ * is identified via an Identity, and has a given privilege that specifies what actions they may
+ * take on the note.
+ *
+ * <dl>
+ *   <dt>sharerUserID</dt>
+ *   <dd>The user ID of the user who shared the note with the recipient.</dd>
+ *
+ *   <dt>recipientIdentity</dt>
+ *   <dd>The identity of the recipient of the share. For a given note, there may be only one
+ *     SharedNote per recipient identity. Only recipientIdentity.id is guaranteed to be set.
+ *     Other fields on the Identity may or my not be set based on the requesting user's
+ *     relationship with the recipient.</dd>
+ *
+ *   <dt>privilege</dt>
+ *   <dd>The privilege level that the share grants to the recipient.</dd>
+ *
+ *   <dt>serviceCreated</dt>
+ *   <dd>The time at which the share was created.</dd>
+ *
+ *   <dt>serviceUpdated</dt>
+ *   <dd>The time at which the share was last updated.</dd>
+ *
+ *   <dt>serviceAssigned</dt>
+ *   <dd>The time at which the share was assigned to a specific recipient user ID.</dd>
+ * </dl>
+ */
+struct SharedNote {
+  1: optional UserID sharerUserID,
+  2: optional Identity recipientIdentity,
+  3: optional SharedNotePrivilegeLevel privilege,
+  4: optional Timestamp serviceCreated,
+  5: optional Timestamp serviceUpdated,
+  6: optional Timestamp serviceAssigned
+}
+
+/**
+ * This structure captures information about the operations that cannot be performed on a given
+ * note that has been shared with a recipient via a SharedNote. The following operations are
+ * <b>never</b> allowed based on SharedNotes, and as such are left out of the NoteRestrictions
+ * structure for brevity:
+ *
+ * <ul>
+ *   <li>Expunging a note (NoteStore.expungeNote)</li>
+ *   <li>Moving a note to the trash (Note.active)</li>
+ *   <li>Updating a note's notebook (Note.notebookGuid)</li>
+ *   <li>Updating a note's tags (Note.tagGuids, Note.tagNames)</li>
+ *   <li>Updating a note's attributes (Note.attributes)</li>
+ *   <li>Sharing a note with the business (NoteStore.shareNoteWithBusiness</li>
+ *   <li>Getting a note's version history (NoteStore.listNoteVersions,
+ *     NoteStore.getNoteVersion)</li>
+ * </ul>
+ *
+ * When a client has permission to update a note's title or content, it may also update the
+ * Note.updated timestamp.
+ *
+ * <b>This structure reflects only the privileges / restrictions conveyed by the SharedNote.</b>
+ * It does not incorporate privileges conveyed by a potential SharedNotebook to the same
+ * recipient. As such, the actual permissions that the recipient has on the note may differ from
+ * the permissions expressed in this structure.
+ *
+ * For example, consider a user with read-only access to a shared notebook, and a read-write share
+ * of a specific note in the notebook. The note restrictions would contain noUpdateTitle = false,
+ * while the notebook restrictions would contain noUpdateNotes = true. In this case, the user is
+ * allowed to update the note title based on the note restrictions.
+ *
+ * Alternatively, consider a user with read-write access to a shared notebook, and a read-only
+ * share of a specific note in that notebook. The note restrictions would contain
+ * noUpdateTitle = true, while the notebook restrictions would contain noUpdateNotes = false. In
+ * this case, the user would have full edit permissions on the note based on the notebook
+ * restrictions.
+ *
+ * <dl>
+ *   <dt>noUpdateTitle</dt>
+ *   <dd>The client may not update the note's title (Note.title).</dd>
+ *
+ *   <dt>noUpdateContent<dt>
+ *   <dd>The client may not update the note's content. Content includes Note.content
+ *     and Note.resources, as well as the related fields Note.contentHash and
+ *     Note.contentLength.</dd>
+ *
+ *   <dt>noEmail</dt>
+ *   <dd>The client may not email the note (NoteStore.emailNote).</dd>
+ *
+ *   <dt>noShare</dt>
+ *   <dd>The client may not share the note with specific recipients
+ *     (NoteStore.createOrUpdateSharedNotes).</dd>
+ *
+ *   <dt>noSharePublicly</dt>
+ *   <dd>The client may not make the note public (NoteStore.shareNote).</dd>
+ * </dl>
+ */
+struct NoteRestrictions {
+  1: optional bool noUpdateTitle,
+  2: optional bool noUpdateContent,
+  3: optional bool noEmail,
+  4: optional bool noShare,
+  5: optional bool noSharePublicly
+}
+
+/**
+ * Represents the owner's account related limits on a Note.
+ * The field uploaded represents the total number of bytes that have been uploaded
+ * to this account and is taken from the SyncState struct. All other fields
+ * represent account related limits and are taken from the AccountLimits struct.
+ * <p />
+ * See SyncState and AccountLimits struct field definitions for more details.
+ */
+struct NoteLimits {
+  1: optional i32 noteResourceCountMax,
+  2: optional i64 uploadLimit,
+  3: optional i64 resourceSizeMax,
+  4: optional i64 noteSizeMax,
+  5: optional i64 uploaded
+}
 
 /**
  * Represents a single note in the user's account.
@@ -1477,6 +1899,21 @@ struct NoteAttributes {
  *   don't already exist.  Created tags will have no parent (they will be at
  *   the top level of the tag panel).
  *   </dd>
+ *
+ * <dt>sharedNotes</dt>
+ *   <dd>The list of recipients with whom this note has been shared. This field will be unset if
+ *     the caller has access to the note via the containing notebook, but does not have activity
+ *     feed permission for that notebook. This field is read-only. Clients may not make changes to
+ *     a note's sharing state via this field.
+ *   </dd>
+ *
+ *   <dt>restrictions</dt>
+ *   <dd>If this field is set, the user has note-level permissions that may differ from their
+ *     notebook-level permissions. In this case, the restrictions structure specifies
+ *     a set of restrictions limiting the actions that a user may take on the note based
+ *     on their note-level permissions. If this field is unset, then there are no
+ *     note-specific restrictions. However, a client may still be limited based on the user's
+ *     notebook permissions.</dd>
  * </dl>
  */
 struct Note {
@@ -1494,7 +1931,10 @@ struct Note {
   12: optional  list<Guid> tagGuids,
   13: optional  list<Resource> resources,
   14: optional  NoteAttributes attributes,
-  15: optional  list<string> tagNames
+  15: optional  list<string> tagNames,
+  16: optional  list<SharedNote> sharedNotes,
+  17: optional  NoteRestrictions restrictions,
+  18: optional  NoteLimits limits
 }
 
 
@@ -1686,10 +2126,9 @@ struct SavedSearch {
  * <dl>
  * <dt>reminderNotifyEmail</dt>
  * <dd>Indicates that the user wishes to receive daily e-mail notifications
- *     for reminders associated with the shared notebook.  This may be
- *     true only for business notebooks that belong to the business of
- *     which the user is a member.  You may only set this value on a
- *     notebook in your business.</dd>
+ *     for reminders associated with the notebook. This may be true only for
+ *     business notebooks that belong to the business of which the user is a
+ *     member. You may only set this value on a notebook in your business.</dd>
  * <dt>reminderNotifyInApp</dt>
  * <dd>Indicates that the user wishes to receive notifications for
  *     reminders by applications that support providing such
@@ -1703,81 +2142,159 @@ struct SharedNotebookRecipientSettings {
 }
 
 /**
+ * Settings meant for the recipient of a notebook share.
+ *
+ * Some of these fields have a 3-state read value but a 2-state write value.
+ * On read, it is possible to observe "unset", true, or false. The initial
+ * state is "unset". When you choose to set a value, you may set it to either
+ * true or false, but you cannot unset the value. Once one of these members
+ * has a true/false value, it will always have a true/false value.
+ *
+ * <dl>
+ * <dt>reminderNotifyEmail</dt>
+ * <dd>Indicates that the user wishes to receive daily e-mail notifications
+ *     for reminders associated with the notebook. This may be
+ *     true only for business notebooks that belong to the business of
+ *     which the user is a member. You may only set this value on a
+ *     notebook in your business. This value will initially be unset.</dd>
+ * <dt>reminderNotifyInApp</dt>
+ * <dd>Indicates that the user wishes to receive notifications for
+ *     reminders by applications that support providing such
+ *     notifications.  The exact nature of the notification is defined
+ *     by the individual applications. This value will initially be unset.</dd>
+ * </dl>
+ * <dt>inMyList</dt>
+ * <dd>The notebook is on the recipient's notebook list (formerly, we would say
+ *     that the recipient has "joined" the notebook)</dd>
+ * <dt>stack</dt>
+ * <dd>The stack the recipient has put this notebook into. See Notebook.stack
+ * for a definition. Every recipient can have their own stack value for the same
+ * notebook.</dd>
+ * </dl>
+ **/
+struct NotebookRecipientSettings {
+ 1:  optional bool reminderNotifyEmail,
+ 2:  optional bool reminderNotifyInApp,
+ 3:  optional bool inMyList,
+ 4:  optional string stack
+}
+
+/**
  * Shared notebooks represent a relationship between a notebook and a single
  * share invitation recipient.
  * <dl>
  * <dt>id</dt>
- * <dd>the primary identifier of the share</dd>
+ * <dd>The primary identifier of the share, which is not globally unique.</dd>
  *
  * <dt>userId</dt>
- * <dd>the user id of the owner of the notebook</dd>
+ * <dd>The user id of the owner of the notebook.</dd>
  *
  * <dt>notebookGuid</dt>
- * <dd>the GUID of the associated notebook shared.</dd>
+ * <dd>The GUID of the notebook that has been shared.</dd>
  *
  * <dt>email</dt>
- * <dd>the email address of the recipient - used by the notebook
- * owner to identify who they shared with.</dd>
+ * <dd>A string containing a display name for the recipient of the share. This may
+ *     be an email address, a phone number, a full name, or some other descriptive
+ *     string This field is read-only to clients. It will be filled in by the service
+ *     when returning shared notebooks.
+ * </dd>
+ *
+ * <dt>recipientIdentityId</dt>
+ * <dd>The IdentityID of the share recipient. If present, only the user who has
+ *     claimed that identity may access this share.
+ * </dd>
  *
  * <dt>notebookModifiable</dt>
- * <dd>(DEPRECATED) a flag indicating the share is read/write -otherwise it's read
- *     only.  This field is deprecated in favor of the new "privilege" field.</dd>
- *
- * <dt>requireLogin</dt>
- * <dd>(DEPRECATED) indicates that a user must login to access the share.  This
- *     field is deprecated and will be "true" for all new shared notebooks.  It
- *     is read-only and ignored when creating or modifying a shared notebook,
- *     except that a shared notebook can be modified to require login.
- *     See "allowPreview" for information on privileges and shared notebooks.</dd>
+ * <dd>DEPRECATED</dd>
  *
  * <dt>serviceCreated</dt>
- * <dd>the date the owner first created the share with the specific email
- *   address</dd>
+ * <dd>The date that the owner first created the share with the specific email
+ *   address.</dd>
  *
  * <dt>serviceUpdated</dt>
- * <dd>the date the shared notebook was last updated on the service.  This
+ * <dd>The date the shared notebook was last updated on the service.  This
  *     will be updated when authenticateToSharedNotebook is called the first
- *     time with a shared notebook requiring login (i.e. when the username is
- *     bound to that shared notebook).</dd>
+ *     time with a shared notebook (i.e. when the username is bound to that
+ *     shared notebook), and also when the SharedNotebook privilege is updated
+ *     as part of a shareNotebook(...) call, as well as on any calls to
+ *     updateSharedNotebook(...).
+ * </dd>
  *
  * <dt>username</dt>
- * <dd>the username of the user who can access this share.
- *   Once it's assigned it cannot be changed.</dd>
+ * <dd>DEPRECATED. The username of the user who can access this share. This
+ *     value is read-only to clients. It will be filled in by the service when
+ *     returning shared notebooks.
+ * </dd>
  *
  * <dt>privilege</dt>
  * <dd>The privilege level granted to the notebook, activity stream, and
- *     invitations.  See the corresponding enumeration for details.</dd>
- *
- * <dt>allowPreview</dt>
- * <dd>Whether or not to grant "READ_NOTEBOOK" privilege without an
- *     authentication token, for authenticateToSharedNotebook(...).  With
- *     the change to "requireLogin" always being true for new shared
- *     notebooks, this is the only way to access a shared notebook without
- *     an authorization token.  This setting expires after the first use
- *     of authenticateToSharedNotebook(...) with a valid authentication
- *     token.</dd>
+ *     invitations.  See the corresponding enumeration for details.
+ * </dd>
  *
  * <dt>recipientSettings</dt>
  * <dd>Settings intended for use only by the recipient of this shared
  *     notebook.  You should skip setting this value unless you want
  *     to change the value contained inside the structure, and only if
  *     you are the recipient.</dd>
+ *
+ * <dt>globalId</dt>
+ * <dd>An immutable, opaque string that acts as a globally unique
+ *     identifier for this shared notebook record.  You can use this field to
+ *     match linked notebook and shared notebook records as well as to
+ *     create new LinkedNotebook records.  This field replaces the deprecated
+ *     shareKey field.
+ * </dd>
+ *
+ * <dt>sharerUserId</dt>
+ * <dd>The user id of the user who shared a notebook via this shared notebook
+ *     instance. This may not be the same as userId, since a user with full
+ *     access to a notebook may have created a new share for that notebook. For
+ *     Business, this represents the user who shared the business notebook. This
+ *     field is currently unset for a SharedNotebook created by joining a
+ *     notebook that has been published to the business.
+ * </dd>
+ *
+ * <dt>recipientUsername</dt>
+ * <dd>The username of the user who can access this share. This is the username
+ *     for the user with the id in recipientUserId. This value can be set
+ *     by clients when calling shareNotebook(...), and that will result in the
+ *     created SharedNotebook being assigned to a user. This value is always set
+ *     if serviceAssigned is set.
+ * </dd>
+ *
+ * <dt>recipientUserId</dt>
+ * <dd>The id of the user who can access this share. This is the id for the user
+ *     with the username in recipientUsername. This value is read-only and set
+ *     by the service. Value set by clients will be ignored. This field may be unset
+ *     for unjoined notebooks and is always set if serviceAssigned is set. Clients should
+ *     prefer this field over recipientUsername unless they need to use usernames
+ *     directly.
+ * </dd>
+ *
+ * <dt>serviceAssigned</dt>
+ * <dd>The date this SharedNotebook was assigned (i.e. has been associated with an
+ *     Evernote user whose user ID is set in recipientUserId). Unset if the SharedNotebook
+ *     is not assigned. This field is a read-only value that is set by the service.
+ * </dd>
  * </dl>
  */
 struct SharedNotebook {
   1:  optional i64 id,
-  2:  optional i32 userId,
-  3:  optional string notebookGuid,
+  2:  optional UserID userId,
+  3:  optional Guid notebookGuid,
   4:  optional string email,
+  18: optional IdentityID recipientIdentityId,
   5:  optional bool notebookModifiable,  // deprecated
-  6:  optional bool requireLogin,  // deprecated
   7:  optional Timestamp serviceCreated,
  10:  optional Timestamp serviceUpdated,
-  8:  optional string shareKey,
-  9:  optional string username,
+  8:  optional string globalId, // rename from shareKey
+  9:  optional string username, // deprecated
  11:  optional SharedNotebookPrivilegeLevel privilege,
- 12:  optional bool allowPreview,
- 13:  optional SharedNotebookRecipientSettings recipientSettings
+ 13:  optional SharedNotebookRecipientSettings recipientSettings,
+ 14:  optional UserID sharerUserId,
+ 15:  optional string recipientUsername,
+ 17:  optional UserID recipientUserId,
+ 16:  optional Timestamp serviceAssigned
 }
 
 /**
@@ -1805,6 +2322,7 @@ struct SharedNotebook {
  * in effect, as accessed by the same authentication token from which
  * the values were obtained.
  *
+ * <dl>
  * <dt>noReadNotes</dt>
  *   <dd>The client is not able to read notes from the service and
  *   the notebook is write-only.
@@ -1820,7 +2338,7 @@ struct SharedNotebook {
  *   </dd>
  * <dt>noShareNotes</dt>
  *   <dd>The client may not share notes in the notebook via the
- *   shareNote method.
+ *   shareNote or createOrUpdateSharedNotes methods.
  *   </dd>
  * <dt>noEmailNotes</dt>
  *   <dd>The client may not e-mail notes via the Evernote service by
@@ -1847,7 +2365,7 @@ struct SharedNotebook {
  *   value may not be set.
  *   </dd>
  * <dt>noPublishToPublic</dt>
- *   <dd>The client may not change the publish the notebook to the public.
+ *   <dd>The client may not publish the notebook to the public.
  *   For example, business notebooks may not be shared publicly.
  *   </dd>
  * <dt>noPublishToBusinessLibrary</dt>
@@ -1882,6 +2400,14 @@ struct SharedNotebook {
  *   associated with the notebook on which the NotebookRestrictions are defined.
  *   See the enumeration for further details.
  *   </dd>
+ * <dt>noShareNotesWithBusiness</dt>
+ *   <dd>The client may not share notes in the notebook via the shareNoteWithBusiness
+ *   method.
+ *   </dd>
+ * <dt>noRenameNotebook</dt>
+ *   <dd>The client may not rename this notebook</dd>
+ *
+ * </dl>
  */
 struct NotebookRestrictions {
   1:  optional bool noReadNotes,
@@ -1903,7 +2429,9 @@ struct NotebookRestrictions {
   17: optional bool noSetParentTag,
   18: optional bool noCreateSharedNotebooks,
   19: optional SharedNotebookInstanceRestrictions updateWhichSharedNotebookRestrictions,
-  20: optional SharedNotebookInstanceRestrictions expungeWhichSharedNotebookRestrictions
+  20: optional SharedNotebookInstanceRestrictions expungeWhichSharedNotebookRestrictions,
+  21: optional bool noShareNotesWithBusiness,
+  22: optional bool noRenameNotebook
 }
 
 /**
@@ -1963,22 +2491,20 @@ struct NotebookRestrictions {
  *   </dd>
  *
  * <dt>publishing</dt>
- *   <dd>If the Notebook has been opened for public access, or
- *   business users shared with their business (i.e. if 'published' is
- *   set to true), then this will point to the set of publishing
- *   information for the Notebook (URI, description, etc.).  A
- *   Notebook cannot be published without providing this information,
- *   but it will persist for later use if publishing is ever disabled
- *   on the Notebook.  Clients that do not wish to change the
- *   publishing behavior of a Notebook should not set this value when
- *   calling NoteStore.updateNotebook().
+ *   <dd>If the Notebook has been opened for public access, then this will point to the set of
+ *   publishing information for the Notebook (URI, description, etc.). A Notebook cannot be
+ *   published without providing this information, but it will persist for later use if publishing
+ *   is ever disabled on the Notebook. Clients that do not wish to change the publishing behavior
+ *   of a Notebook should not set this value when calling NoteStore.updateNotebook().
+ *   Note that this structure is never populated for business notebooks, see the businessNotebook
+ *   field.
  *   </dd>
  *
  * <dt>published</dt>
  *   <dd>If this is set to true, then the Notebook will be
  *   accessible either to the public, or for business users to their business,
- *   via the 'publishing' specification, which must also be set.  If this is set
- *   to false, the Notebook will not be available to the public (or business).
+ *   via the 'publishing' or 'businessNotebook' specifications, which must also be set. If this is
+ *   set to false, the Notebook will not be available to the public (or business).
  *   Clients that do not wish to change the publishing behavior of a Notebook
  *   should not set this value when calling NoteStore.updateNotebook().
  *   </dd>
@@ -2005,11 +2531,10 @@ struct NotebookRestrictions {
  *   </dd>
  *
  * <dt>businessNotebook</dt>
- *   <dd>If the notebook is part of a business account and has been published to the
- *   business library, this will contain information for the library listing.
- *   The presence or absence of this field is not a reliable test of whether a given
- *   notebook is in fact a business notebook - the field is only used when a notebook is or
- *   has been published to the business library.
+ *   <dd>If the notebook is part of a business account and has been shared with the entire
+ *   business, this will contain sharing information. The presence or absence of this field
+ *   is not a reliable test of whether a given notebook is in fact a business notebook - the
+ *   field is only used when a notebook is or has been shared with the entire business.
  *   </dd>
  *
  * <dt>contact</dt>
@@ -2022,6 +2547,11 @@ struct NotebookRestrictions {
  *   the existing value, if any, should be preserved.
  *   </dd>
  *
+ * <dt>recipientSettings</dt>
+ *   <dd>This represents the preferences/settings that a recipient has set for this
+ *   notebook. These are intended to be changed only by the recipient, and each
+ *   recipient has their own recipient settings.
+ *   </dd>
  * </dl>
  */
 struct Notebook {
@@ -2038,29 +2568,26 @@ struct Notebook {
   14: optional  list<SharedNotebook> sharedNotebooks,
   15: optional  BusinessNotebook businessNotebook,
   16: optional  User contact,
-  17: optional  NotebookRestrictions restrictions
+  17: optional  NotebookRestrictions restrictions,
+  18: optional  NotebookRecipientSettings recipientSettings
 }
 
 /**
- * A link in an users account that refers them to a public or individual share in
- * another user's account.
+ * A link in a user's account that refers them to a public or
+ * individual shared notebook in another user's account.
  *
  * <dl>
  * <dt>shareName</dt>
- * <dd>the display name of the shared notebook.
- *   The link owner can change this.</dd>
+ * <dd>The display name of the shared notebook. The link owner can change this.</dd>
  *
  * <dt>username</dt>
- * <dd>the username of the user who owns the shared or public notebook</dd>
+ * <dd>The username of the user who owns the shared or public notebook.</dd>
  *
  * <dt>shardId</dt>
- * <dd>the shard ID of the notebook if the notebook is not public</dt>
- *
- * <dt>shareKey</dt>
- * <dd>the secret key that provides access to the shared notebook</dd>
+ * <dd>The shard ID of the notebook if the notebook is not public.</dt>
  *
  * <dt>uri</dt>
- * <dd>the identifier of the public notebook</dd>
+ * <dd>The identifier of the public notebook.</dd>
  *
  * <dt>guid</dt>
  *   <dd>The unique identifier of this linked notebook.  Will be set whenever
@@ -2109,15 +2636,22 @@ struct Notebook {
  *
  * <dt>businessId</dt>
  *   <dd>If set, this will be the unique identifier for the business that owns
- *   the notebook to which the linked notebook refers.
+ *   the notebook to which the linked notebook refers.</dd>
  *
+ * <dt>sharedNotebookGlobalId</dt>
+ *   <dd>The globally unique identifier (globalId) of the shared notebook that
+ *   corresponds to the share key, or the GUID of the Notebook that the linked notebook
+ *   refers to. This field must be filled in with the SharedNotebook.globalId or
+ *   Notebook.GUID value when creating new LinkedNotebooks. This field replaces the
+ *   deprecated "shareKey" field.
+ *   </dd>
  * </dl>
  */
 struct LinkedNotebook {
   2:  optional string shareName,
   3:  optional string username,
   4:  optional string shardId,
-  5:  optional string shareKey,
+  5:  optional string sharedNotebookGlobalId, // rename from shareKey
   6:  optional string uri,
   7:  optional Guid guid,
   8:  optional i32 updateSequenceNum,
@@ -2162,4 +2696,296 @@ struct NotebookDescriptor {
   3: optional string contactName,
   4: optional bool hasSharedNotebook,
   5: optional i32 joinedUserCount
+}
+
+/**
+ * This structure represents profile information for a user in a business.
+ *
+ * <dl>
+ * <dt>id</dt>
+ * <dd>The numeric identifier that uniquely identifies a user.</dd>
+ *
+ * <dt>name</dt>
+ * <dd>The full name of the user.</dd>
+ *
+ * <dt>email</dt>
+ * <dd>The user's business email address. If the user has not registered their business
+ *   email address, this field will contain the user's personal email address.
+ * </dd>
+ *
+ * <dt>username</dt>
+ * <dd>The user's Evernote username.</dd>
+ *
+ * <dt>attributes</dt>
+ * <dd>The user's business specific attributes.</dd>
+ *
+ * <dt>joined</dt>
+ * <dd>The time when the user joined the business</dd>
+ *
+ * <dt>photoLastUpdated</dt>
+ * <dd>The time when the user's profile photo was most recently updated</dd>
+ *
+ * <dt>photoUrl</dt>
+ * <dd>A URL identifying a copy of the user's current profile photo</dd>
+ *
+ * <dt>role</dt>
+ * <dd>The BusinessUserRole for the user</dd>
+ *
+ * </dl>
+ */
+struct UserProfile {
+  1: optional UserID id,
+  2: optional string name,
+  3: optional string email,
+  4: optional string username,
+  5: optional BusinessUserAttributes attributes,
+  6: optional Timestamp joined
+  7: optional Timestamp photoLastUpdated,
+  8: optional string photoUrl,
+  9: optional BusinessUserRole role
+}
+
+/**
+ * This enumeration defines the possible types of related content.
+ *
+ * NEWS_ARTICLE: This related content is a news article
+ * PROFILE_PERSON: This match refers to the profile of an individual person
+ * PROFILE_ORGANIZATION: This match refers to the profile of an organization
+ * REFERENCE_MATERIAL: This related content is material from reference works
+ */
+enum RelatedContentType {
+  NEWS_ARTICLE = 1,
+  PROFILE_PERSON = 2,
+  PROFILE_ORGANIZATION = 3,
+  REFERENCE_MATERIAL = 4,
+}
+
+/**
+ * This enumeration defines the possible ways to access related content.
+ *
+ * NOT_ACCESSIBLE: The content is not accessible given the user's privilege level, but
+ *     still worth showing as a snippet. The content url may point to a webpage that
+ *     explains why not, or explains how to access that content.
+ *
+ * DIRECT_LINK_ACCESS_OK: The content is accessible directly, and no additional login is
+ *     required.
+ *
+ * DIRECT_LINK_LOGIN_REQUIRED: The content is accessible directly, but an additional login
+ *     is required.
+ *
+ * DIRECT_LINK_EMBEDDED_VIEW: The content is accessible directly, and should be shown in
+ *     an embedded web view.
+ *     If the URL refers to a secured location under our control (for example,
+ *     https://www.evernote.com/*), the client may include user-specific authentication
+ *     credentials with the request.
+ */
+enum RelatedContentAccess {
+  NOT_ACCESSIBLE = 0,
+  DIRECT_LINK_ACCESS_OK = 1,
+  DIRECT_LINK_LOGIN_REQUIRED = 2,
+  DIRECT_LINK_EMBEDDED_VIEW = 3,
+}
+
+/**
+ * An external image that can be shown with a related content snippet,
+ * usually either a JPEG or PNG image. It is up to the client which image(s) are shown,
+ * depending on available screen real estate, resolution and aspect ratio.
+ *
+ * <dl>
+ *  <dt>url</dt>
+ *    <dd>The external URL of the image</dd>
+ *  <dt>width</dt>
+ *    <dd>The width of the image, in pixels.</dd>
+ *  <dt>height</dt>
+ *    <dd>The height of the image, in pixels.</dd>
+ *  <dt>pixelRatio</dt>
+ *    <dd>the pixel ratio (usually either 1.0, 1.5 or 2.0)</dd>
+ *  <dt>fileSize</dt>
+ *    <dd>the size of the image file, in bytes</dd>
+ * </dl>
+ */
+struct RelatedContentImage {
+  1: optional string url,
+  2: optional i32 width,
+  3: optional i32 height,
+  4: optional double pixelRatio,
+  5: optional i32 fileSize
+}
+
+/**
+ * A structure identifying one snippet of related content (some information that is not
+ * part of an Evernote account but might still be relevant to the user).
+ *
+ * <dl>
+ *
+ * <dt>contentId</dt>
+ * <dd>An identifier that uniquely identifies the content.</dd>
+ *
+ * <dt>title</dt>
+ * <dd>The main title to show.</dd>
+ *
+ * <dt>url</dt>
+ * <dd>The URL the client can use to retrieve the content.</dd>
+ *
+ * <dt>sourceId</dt>
+ * <dd>An identifier that uniquely identifies the source.</dd>
+ *
+ * <dt>sourceUrl</dt>
+ * <dd>A URL the client can access to know more about the source.</dd>
+ *
+ * <dt>sourceFaviconUrl</dt>
+ * <dd>The favicon URL of the source which the content belongs to.</dd>
+ * </dl>
+ *
+ * <dt>sourceName</dt>
+ * <dd>A human-readable name of the source that provided this content.</dd>
+ *
+ * <dt>date</dt>
+ * <dd>A timestamp telling the user about the recency of the content.</dd>
+ *
+ * <dt>teaser</dt>
+ * <dd>A teaser text to show to the user; usually the first few sentences of the content,
+ *     excluding the title.</dd>
+ *
+ * <dt>thumbnails</dt>
+ * <dd>A list of thumbnails the client can show in the snippet.</dd>
+ *
+ * <dt>contentType</dt>
+ * <dd>The type of this related content.</dd>
+ *
+ * <dt>accessType</dt>
+ * <dd>An indication of how this content can be accessed. This type influences the
+ *     semantics of the <code>url</code> parameter.</dd>
+ *
+ * <dt>visibleUrl</dt>
+ * <dd>If set, the client should show this URL to the user, instead of the URL that was
+ *     used to retrieve the content. This URL should be used when opening the content
+ *     in an external browser window, or when sharing with another person.</dd>
+ *
+ * <dt>clipUrl</dt>
+ * <dd>If set, the client should use this URL for clipping purposes, instead of the URL
+ *     that was used to retrieve the content. The clipUrl may directly point to an .enex
+ *     file, for example.</dd>
+ *
+ * <dt>contact</dt>
+ * <dd>If set, the client may use this Contact for messaging purposes. This will typically
+ *     only be set for user profiles.</dd>
+ *
+ * <dt>authors</dt>
+ * <dd>For News articles only. A list of names of the article authors, if available.</dd>
+ *
+ * </dl>
+ */
+struct RelatedContent {
+  1: optional string contentId,
+  2: optional string title,
+  3: optional string url,
+  4: optional string sourceId,
+  5: optional string sourceUrl,
+  6: optional string sourceFaviconUrl,
+  7: optional string sourceName,
+  8: optional Timestamp date,
+  9: optional string teaser,
+  10: optional list<RelatedContentImage> thumbnails,
+  11: optional RelatedContentType contentType,
+  12: optional RelatedContentAccess accessType,
+  13: optional string visibleUrl,
+  14: optional string clipUrl,
+  15: optional Contact contact,
+  16: optional list<string> authors,
+}
+
+/**
+ * A structure describing an invitation to join a business account.
+ *
+ * <dl>
+ *   <dt>businessId</dt>
+ *     <dd>
+ *       The ID of the business to which the invitation grants access.
+ *     </dd>
+ *
+ *   <dt>email</dt>
+ *     <dd>
+ *       The email address that was invited to join the business.
+ *     </dd>
+ *
+ *   <dt>role</dt>
+ *     <dd>
+ *       The role to grant the user after the invitation is accepted.
+ *     </dd>
+ *
+ *   <dt>status</dt>
+ *     <dd>
+ *       The status of the invitation.
+ *     </dd>
+ *
+ *   <dt>requesterId</dt>
+ *     <dd>
+ *       For invitations that were initially requested by a non-admin member of the business,
+ *       this field specifies the user ID of the requestor. For all other invitations, this field
+ *       will be unset.
+ *     </dd>
+ *   <dt>fromWorkChat</dt>
+ *     <dd>
+ *       If this invitation was created implicitly via a WorkChat, this field
+ *       will be true.
+ *     </dd>
+ *   <dt>created</dt>
+ *     <dd>
+ *       The timestamp at which this invitation was created.
+ *     </dd>
+ * </dl>
+ */
+struct BusinessInvitation {
+  1: optional i32 businessId,
+  2: optional string email,
+  3: optional BusinessUserRole role,
+  4: optional BusinessInvitationStatus status,
+  5: optional UserID requesterId,
+  6: optional bool fromWorkChat,
+  7: optional Timestamp created
+}
+
+/**
+ *
+ */
+enum UserIdentityType {
+  EVERNOTE_USERID = 1,
+  EMAIL = 2,
+  IDENTITYID = 3
+}
+
+/**
+ * A structure that holds user identifying information such as an
+ * email address, Evernote user ID, or an identifier from a 3rd party
+ * service.  An instance consists of a type and a value, where the
+ * value will be stored in one of the value fields depending upon the
+ * data type required for the identity type.
+ *
+ * When used with shared notebook invitations, a UserIdentity
+ * identifies a particular person who may not (yet) have an Evernote
+ * UserID UserIdentity but who has (almost) unique access to the
+ * service endpoint described by the UserIdentity.  For example, an
+ * e-mail UserIdentity can identify the person who receives e-mail at
+ * the given address, and who can therefore read the share key that
+ * has a cryptographic signature from the Evernote service. With the
+ * share key, this person can supply their Evernote UserID via an
+ * authentication token to join the notebook
+ * (authenticateToSharedNotebook), at which time we have associated
+ * the e-mail UserIdentity with an Evernote UserID UserIdentity. Note
+ * that using shared notebook records, the relationship between
+ * Evernote UserIDs and e-mail addresses is many to many.
+ *
+ * Note that the identifier may not directly identify a
+ * particular Evernote UserID UserIdentity without further
+ * verification.  For example, an e-mail UserIdentity may be
+ * associated with an invitation to join a notebook (via a shared
+ * notebook record), but until a user uses a share key, that was sent
+ * to that e-mail address, to join the notebook, we do not know an
+ * Evernote UserID UserIdentity ID to match the e-mail address.
+ */
+struct UserIdentity {
+  1: optional UserIdentityType type,
+  2: optional string stringIdentifier,
+  3: optional i64 longIdentifier
 }
