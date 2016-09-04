@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2013 Evernote Corporation.
+ * Copyright 2007-2016 Evernote Corporation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -24,8 +24,8 @@
  */
 
 /*
- * This file contains the EDAM protocol interface for operations to query
- * and/or authenticate users.
+ * This file contains the EDAM protocol interface for operations to access and modify the contents
+ * of an Evernote user account such as Notes, Notebooks and Tags.
  */
 
 include "UserStore.thrift"
@@ -46,12 +46,11 @@ namespace perl EDAMNoteStore
 /**
  * This structure encapsulates the information about the state of the
  * user's account for the purpose of "state based" synchronization.
- *<dl>
+ * <dl>
  * <dt>currentTime</dt>
  *   <dd>
  *   The server's current date and time.
  *   </dd>
- *
  * <dt>fullSyncBefore</dt>
  *   <dd>
  *   The cutoff date and time for client caches to be
@@ -60,7 +59,6 @@ namespace perl EDAMNoteStore
  *   objects.  This cutoff point will change over time as archival data is
  *   deleted or special circumstances on the service require resynchronization.
  *   </dd>
- *
  * <dt>updateCount</dt>
  *   <dd>
  *   Indicates the total number of transactions that have
@@ -70,7 +68,6 @@ namespace perl EDAMNoteStore
  *   This number is the "high water mark" for Update Sequence Numbers (USN)
  *   within the account.
  *   </dd>
- *
  * <dt>uploaded</dt>
  *   <dd>
  *   The total number of bytes that have been uploaded to
@@ -80,13 +77,43 @@ namespace perl EDAMNoteStore
  *   This value may not be present if the SyncState has been retrieved by
  *   a caller that only has read access to the account.
  *   </dd>
+ * <dt>userLastUpdated</dt>
+ *   <dd>
+ *   The last time when a user's account level information was changed. This value
+ *   is the latest time when a modification was made to any of the following:
+ *   accounting information (billing, quota, premium status, etc.), user attributes
+ *   and business user information (business name, business user attributes, etc.) if
+ *   the user is in a business.
+ *   Clients who need to maintain account information about a User should watch this
+ *   field for updates rather than polling UserStore.getUser for updates. Here is the
+ *   basic flow that clients should follow:
+ *   <ol>
+ *     <li>Call NoteStore.getSyncState to retrieve the SyncState object</li>
+ *     <li>Compare SyncState.userLastUpdated to previously stored value:
+ *         if (SyncState.userLastUpdated > previousValue)
+ *           call UserStore.getUser to get the latest User object;
+ *         else
+ *           do nothing;</li>
+ *     <li>Update previousValue = SyncState.userLastUpdated</li>
+ *   </ol>
+ *   </dd>
+ * <dt>userMaxMessageEventId</dt>
+ *   <dd>
+ *   The greatest MessageEventID for this user's account. Clients that do a full
+ *   sync should store this value locally and compare their local copy to the
+ *   value returned by getSyncState to determine if they need to sync with
+ *   MessageStore. This value will be omitted if the user has never sent or
+ *   received a message.
+ *   </dd>
  * </dl>
  */
 struct SyncState {
   1:  required  Types.Timestamp currentTime,
   2:  required  Types.Timestamp fullSyncBefore,
   3:  required  i32 updateCount,
-  4:  optional  i64 uploaded
+  4:  optional  i64 uploaded,
+  5:  optional  Types.Timestamp userLastUpdated,
+  6:  optional  Types.MessageEventID userMaxMessageEventId,
 }
 
 /**
@@ -133,8 +160,7 @@ struct SyncState {
  * <dt>notebooks</dt>
  *   <dd>
  *   If present, this is a list of non-expunged notebooks that
- *   have a USN in this chunk.  This will include notebooks that are "deleted"
- *   but not expunged (i.e. in the trash).
+ *   have a USN in this chunk.
  *   </dd>
  *
  * <dt>tags</dt>
@@ -194,7 +220,6 @@ struct SyncState {
  *   If present, the GUIDs of all of the LinkedNotebooks
  *   that were permanently expunged in this chunk.
  *   </dd>
- * </dl>
  */
 struct SyncChunk {
   1:  required  Types.Timestamp currentTime,
@@ -299,11 +324,50 @@ struct SyncChunk {
  *   only the keysOnly field will be filled in.
  *   </dd>
  *
+ * <dt>omitSharedNotebooks<dt>
+ *   <dd>
+ *   Normally, if 'includeNotebooks' is true, then the SyncChunks will
+ *   include Notebooks that may include a set of SharedNotebook
+ *   invitations via Notebook.sharedNotebookIds and Notebook.sharedNotebooks.
+ *   However, if omitSharedNotebooks is set to true, then the Notebooks
+ *   will omit those two fields and leave them unset. This should be used
+ *   by clients who want to know their own set of Notebooks (and the
+ *   associated permissions via Notebook.recipientSettings), and who
+ *   do not need to know the full set of other people who can also see
+ *   that same notebook.
+ *   </dd>
+ *
  * <dt>requireNoteContentClass</dt>
  *   <dd>
  *   If set, then only send notes whose content class matches this value.
  *   The value can be a literal match or, if the last character is an
  *   asterisk, a prefix match.
+ *   </dd>
+ *
+ * <dt>notebookGuids</dt>
+ *   <dd>
+ *   If set, then restrict the returned notebooks, notes, and
+ *   resources to those associated with one of the notebooks whose
+ *   GUID is provided in this list.  If not set, then no filtering on
+ *   notebook GUID will be performed.  If you set this field, you may
+ *   not also set includeExpunged else an EDAMUserException with an
+ *   error code of DATA_CONFLICT will be thrown.  You only need to set
+ *   this field if you want to restrict the returned entities more
+ *   than what your authentication token allows you to access.  For
+ *   example, there is no need to set this field for single notebook
+ *   tokens such as for shared notebooks.  You can use this field to
+ *   synchronize a newly discovered business notebook while
+ *   incrementally synchronizing a business account, in which case you
+ *   will only need to consider setting includeNotes,
+ *   includeNotebooks, includeNoteAttributes, includeNoteResources,
+ *   and maybe some of the "FullMap" fields.
+ *   </dd>
+ *
+ * <dt>includeSharedNotes</dt>
+ *   <dd>
+ *   If true, then the service will include the sharedNotes field on all
+ *   notes that are in SyncChunk.notes. If 'includeNotes' is false, then
+ *   this will have no effect.
  *   </dd>
  * </dl>
  */
@@ -320,7 +384,10 @@ struct SyncChunkFilter {
   10: optional  bool includeNoteApplicationDataFullMap,
   12: optional  bool includeResourceApplicationDataFullMap,
   13: optional  bool includeNoteResourceApplicationDataFullMap,
-  11: optional  string requireNoteContentClass
+  17: optional  bool includeSharedNotes,
+  16: optional  bool omitSharedNotebooks,
+  11: optional  string requireNoteContentClass,
+  15: optional  set<string> notebookGuids
 }
 
 
@@ -385,6 +452,20 @@ struct SyncChunkFilter {
  *   as a wish list, not a requirement.
  *   Accepts the full search grammar documented in the Evernote API Overview.
  *   </dd>
+ *
+ * <dt>includeAllReadableNotebooks</dt>
+ *   <dd>
+ *   If true, then the search will include all business notebooks that are readable
+ *   by the user. A business authentication token must be supplied for
+ *   this option to take effect when calling search APIs.
+ *   </dd>
+ *
+ * <dt>context</dt>
+ * <dd>Specifies the context to consider when determining result ranking.
+ *     Clients must leave this value unset unless they wish to explicitly specify a known
+ *     non-default context.
+ * </dd>
+ *
  * </dl>
  */
 struct NoteFilter {
@@ -396,7 +477,9 @@ struct NoteFilter {
   5: optional  list<Types.Guid> tagGuids,
   6: optional  string timeZone,
   7: optional  bool inactive,
-  8: optional  string emphasized
+  8: optional  string emphasized,
+  9: optional  bool includeAllReadableNotebooks,
+  10: optional string context
 }
 
 
@@ -620,6 +703,55 @@ struct NoteCollectionCounts {
 }
 
 /**
+ * This structure is provided to the getNoteWithResultSpec function to specify the subset of
+ * fields that should be included in the Note that is returned. This allows clients to request
+ * the minimum set of information that they require when retrieving a note, reducing the size
+ * of the response and improving the response time.
+ *
+ * If one of the fields in this spec is not set, then it will be treated as 'false' by the service,
+ * so that the default behavior is to include none of the fields below in the Note.
+ *
+ * <dl>
+ *   <dt>includeContent</dt>
+ *   <dd>If true, the Note.content field will be populated with the note's ENML contents.</dd>
+ *
+ *   <dt>includeResourcesData</dt>
+ *   <dd>If true, any Resource elements will include the binary contents of their 'data' field's
+ *     body.</dd>
+ *
+ *   <dt>includeResourcesRecognition</dt>
+ *   <dd>If true, any Resource elements will include the binary contents of their 'recognition'
+ *     field's body if recognition data is available.</dd>
+ *
+ *   <dt>includeResourcesAlternateData</dt>
+ *   <dd>If true, any Resource elements will include the binary contents of their 'alternateData'
+ *     field's body, if an alternate form is available.</dd>
+ *
+ *   <dt>includeSharedNotes</dt>
+ *   <dd>If true, the Note.sharedNotes field will be populated with the note's shares.</dd>
+ *
+ *   <dt>includeNoteAppDataValues</dt>
+ *   <dd>If true, the Note.attributes.applicationData.fullMap field will be populated.</dd>
+ *
+ *   <dt>includeResourceAppDataValues</dt>
+ *   <dd>If true, the Note.resource.attributes.applicationData.fullMap field will be populated.</dd>
+ *
+ *   <dt>includeAccountLimits</dt>
+ *   <dd>If true, the Note.limits field will be populated with the note owner's account limits.</dd>
+ * </dl>
+ */
+struct NoteResultSpec {
+  1: optional bool includeContent,
+  2: optional bool includeResourcesData,
+  3: optional bool includeResourcesRecognition,
+  4: optional bool includeResourcesAlternateData,
+  5: optional bool includeSharedNotes,
+  6: optional bool includeNoteAppDataValues,
+  7: optional bool includeResourceAppDataValues,
+  8: optional bool includeAccountLimits
+}
+
+/**
  * Parameters that must be given to the NoteStore emailNote call. These allow
  * the caller to specify the note to send, the recipient addresses, etc.
  *
@@ -699,12 +831,17 @@ struct NoteEmailParameters {
  *  <dt>saved</dt>
  *  <dd>
  *    A timestamp that holds the date and time when this version of the note
- *    was backed up by Evernote's servers.  This
+ *    was backed up by Evernote's servers.
  *  </dd>
  *  <dt>title</dt>
  *  <dd>
  *    The title of the note when this particular version was saved.  (The
  *    current title of the note may differ from this value.)
+ *  </dd>
+ *  <dt>lastEditorId</dt>
+ *  <dd>
+ *    The ID of the user who made the change to this version of the note. This will be
+ *    unset if the note version was edited by the owner of the account.
  *  </dd>
  * </dl>
  */
@@ -712,34 +849,8 @@ struct NoteVersionId {
   1:  required  i32 updateSequenceNum,
   2:  required  Types.Timestamp updated,
   3:  required  Types.Timestamp saved,
-  4:  required  string title
-}
-
-/**
- * This structure is passed from clients to the Evernote service when they wish
- * to relay coarse-grained usage metrics to the service to help improve
- * products.
- *
- * <dl>
- *  <dt>sessions</dt>
- *  <dd>
- *    This field contains a count of the number of usage "sessions" that have
- *    occurred with this client which have not previously been reported to
- *    the service.
- *    A "session" is defined as one of the 96 fifteen-minute intervals of the
- *    day when someone used Evernote's interface at least once.
- *    So if a user interacts with an Evernote client at 12:18, 12:24, and 12:36,
- *    and then the client synchronizes at 12:39, it would report that there were
- *    two previously-unreported sessions (one session for the 12:15-12:30 time
- *    period, and one for the 12:30-12:45 period).
- *    If the user used Evernote again at 12:41 and synchronized at 12:43, it
- *    would not report any new sessions, because the 12:30-12:45 session had
- *    already been reported.
- *  </dd>
- * </dl>
- */
-struct ClientUsageMetrics {
-  1:  optional  i32 sessions
+  4:  required  string title,
+  5:  optional  Types.UserID lastEditorId
 }
 
 /**
@@ -769,7 +880,25 @@ struct ClientUsageMetrics {
  *
  * <dt>referenceUri</dt>
  * <dd>A URI string specifying a reference entity, around which "relatedness"
- *     should be based. This can be an URL pointing to a web page, for example. 
+ *     should be based. This can be an URL pointing to a web page, for example.
+ * </dd>
+ *
+ * <dt>context</dt>
+ * <dd>Specifies the context to consider when determining related results.
+ *     Clients must leave this value unset unless they wish to explicitly specify a known
+ *     non-default context.
+ * </dd>
+ *
+ * <dt>cacheKey</dt>
+ * <dd>If set and non-empty, this is an indicator for the server whether it is actually
+ *     necessary to perform a new findRelated call at all. Cache Keys are opaque strings
+ *     which are returned by the server as part of "RelatedResult" in response
+ *     to a "NoteStore.findRelated" query. Cache Keys are inherently query specific.
+ *
+ *     If set to an empty string, this indicates that the server should generate a cache
+ *     key in the response as part of "RelatedResult".
+ *
+ *     If not set, the server will not attempt to generate a cache key at all.
  * </dd>
  * </dl>
  */
@@ -777,7 +906,9 @@ struct RelatedQuery {
   1: optional string noteGuid,
   2: optional string plainText,
   3: optional NoteFilter filter,
-  4: optional string referenceUri
+  4: optional string referenceUri,
+  5: optional string context,
+  6: optional string cacheKey
 }
 
 /**
@@ -799,7 +930,6 @@ struct RelatedQuery {
  * <dt>tags</dt>
  * <dd>If tags have been requested to be included, this will be the list
  *     of tags.</dd>
- * </dl>
  *
  * <dt>containingNotebooks</dt>
  * <dd>If <code>includeContainingNotebooks</code> is set to <code>true</code>
@@ -807,14 +937,71 @@ struct RelatedQuery {
  *     to which the returned related notes belong. The notebooks in this
  *     list will occur once per notebook GUID and are represented as
  *     NotebookDescriptor objects.</dd>
- * </dl>
+ *
+ * <dt>experts</dt>
+ * <dd>If experts have been requested to be included, this will return
+ *  a list of users within your business who have knowledge about the specified query.
+ * </dd>
+ *
+ * <dt>relatedContent</dt>
+ * <dd>If related content has been requested to be included, this will be the list of
+ *  related content snippets.
+ * </dd>
+ *
+ * <dt>cacheKey</dt>
+ * <dd>If set and non-empty, this cache key may be used in subsequent
+ *     "NoteStore.findRelated" calls (via "RelatedQuery") to re-use previous
+ *     responses that were cached on the client-side, instead of actually performing
+ *     another search.
+ *
+ *     If set to an empty string, this indicates that the server could not determine
+ *     a specific key for this response, but the client should nevertheless remove
+ *     any previously cached result for this request.
+ *
+ *     If unset/null, it is up to the client whether to re-use cached results or to
+ *     use the server's response.
+ *
+ *     If set to the exact non-empty cache key that was specified in
+ *     "RelatedQuery.cacheKey", this indicates that the server decided that cached results
+ *     could be reused.
+ *
+ *     Depending on the cache key specified in the query, the "RelatedResult" may only be
+ *     partially filled. For each set field, the client should replace the corresponding
+ *     part in the previously cached result with the new partial result.
+ *
+ *     For example, for a specific query that has both "RelatedResultSpec.maxNotes" and
+ *     "RelatedResultSpec.maxRelatedContent" set to positive values, the server may decide
+ *     that the previously requested and cached <em>Related Content</em> are unchanged,
+ *     but new results for <em>Related Notes</em> are available. The
+ *     response will have a new cache key and have "RelatedResult.notes" set, but have
+ *     "RelatedResult.relatedContent" unset (not just empty, but really unset).
+ *
+ *     In this situation, the client should replace any cached notes with the newly
+ *     returned "RelatedResult.notes", but it can re-use the previously cached entries for
+ *     "RelatedResult.relatedContent". List fields that are set, but empty indicate that
+ *     no results could be found; the cache should be updated correspondingly.
+ * </dd>
+ *
+ * <dt>cacheExpires</dt>
+ * <dd> If set, clients should reuse this response for any situations where the same input
+ *      parameters are applicable for up to this many seconds after receiving this result.
+ *
+ *      After this time has passed, the client may request a new result from the service,
+ *      but it should supply the stored cacheKey to the service when checking for an
+ *      update.
+ * </dd>
+ *
  * </dl>
  */
 struct RelatedResult {
   1: optional list<Types.Note> notes,
   2: optional list<Types.Notebook> notebooks,
   3: optional list<Types.Tag> tags,
-  4: optional list<Types.NotebookDescriptor> containingNotebooks
+  4: optional list<Types.NotebookDescriptor> containingNotebooks,
+  6: optional list<Types.UserProfile> experts,
+  7: optional list<Types.RelatedContent> relatedContent,
+  8: optional string cacheKey,
+  9: optional i32 cacheExpires
 }
 
 /**
@@ -855,6 +1042,22 @@ struct RelatedResult {
  *     in the RelatedResult, which will contain the list of notebooks to
  *     to which the returned related notes belong.</dd>
  * </dl>
+ *
+ * <dt>maxExperts</dt>
+ * <dd>This can only be used when making a findRelated call against a business.
+ *  Find users within your business who have knowledge about the specified query.
+ *  No more than this many users will be returned. Any value greater than
+ *  EDAM_RELATED_MAX_EXPERTS will be silently capped.
+ * </dd>
+ *
+ * <dt>maxRelatedContent</dt>
+ * <dd>Return snippets of related content that is related to the query, but no more than
+ *  this many. Any value greater than EDAM_RELATED_MAX_RELATED_CONTENT will be silently
+ *  capped. If you do not set this field, then no related content will be returned.</dd>
+ * </dl>
+ *
+ * <dt>relatedContentTypes</dt>
+ * <dd>Specifies the types of Related Content that should be returned.</dd>
  * </dl>
  */
 struct RelatedResultSpec {
@@ -862,33 +1065,641 @@ struct RelatedResultSpec {
   2: optional i32 maxNotebooks,
   3: optional i32 maxTags,
   4: optional bool writableNotebooksOnly,
-  5: optional bool includeContainingNotebooks
+  5: optional bool includeContainingNotebooks,
+  7: optional i32 maxExperts,
+  8: optional i32 maxRelatedContent,
+  9: optional set<Types.RelatedContentType> relatedContentTypes,
+}
+
+/**
+ * The result of a call to updateNoteIfUsnMatches, which optionally updates a note
+ * based on the current value of the note's update sequence number on the service.
+ *
+ * <dl>
+ * <dt>note</dt>
+ * <dd>Either the current state of the note if <tt>updated</tt> is false or the
+ * result of updating the note as would be done via the <tt>updateNote</tt> method.
+ * If the note was not updated, you will receive a Note that does not include note
+ * content, resources data, resources recognition data, or resources alternate data.
+ * You can check for updates to these large objects by checking the Data.bodyHash
+ * values and downloading accordingly.</dd>
+ *
+ * <dt>updated</dt>
+ * <dd>Whether or not the note was updated by the operation.</dd>
+ * </dl>
+ */
+struct UpdateNoteIfUsnMatchesResult {
+  1: optional Types.Note note,
+  2: optional bool updated
 }
 
 /*
+ * This structure is used by the service to communicate to clients, via
+ * getShareRelationships, which privilege levels are assignable to the
+ * target of a share relationship.
+ *
+ * <dl>
+ * <dt>noSetReadOnly</dt>
+ * <dd>This value is true if the user is not allowed to set the privilege
+ * level to READ_ONLY.</dd>
+ *
+ * <dt>noSetReadPlusActivity</dt>
+ * <dd>This value is true if the user is not allowed to set the privilege
+ * level to READ_NOTEBOOK_PLUS_ACTIVITY.</dd>
+ *
+ * <dt>noSetModify</dt>
+ * <dd>This value is true if the user is not allowed to set the
+ * privilege level to MODIFY_NOTEBOOK_PLUS_ACTIVITY.</dd>
+ *
+ * <dt>noSetFullAccess</dt>
+ * <dd>This value is true if the user is not allowed to set the
+ * privilege level to FULL_ACCESS, or BUSINESS_FULL_ACCESS if the
+ * notebook is a business notebook</dd>
+ * </dl>
+ */
+struct ShareRelationshipRestrictions {
+  1:  optional  bool noSetReadOnly,
+  2:  optional  bool noSetReadPlusActivity,
+  3:  optional  bool noSetModify,
+  4:  optional  bool noSetFullAccess
+}
+
+/**
+ * Privilege levels for accessing shared notebooks.
+ *
+ * READ_NOTEBOOK: Recipient is able to read the contents of the shared notebook
+ *   but does not have access to information about other recipients of the
+ *   notebook or the activity stream information.
+ *
+ * READ_NOTEBOOK_PLUS_ACTIVITY: Recipient has READ_NOTEBOOK rights and can also
+ *   access information about other recipients and the activity stream.
+ *
+ * MODIFY_NOTEBOOK_PLUS_ACTIVITY: Recipient has rights to read and modify the contents
+ *   of the shared notebook, including the right to move notes to the trash and to create
+ *   notes in the notebook.  The recipient can also access information about other
+ *   recipients and the activity stream.
+ *
+ * FULL_ACCESS: Recipient has full rights to the shared notebook and recipient lists,
+ *   including privilege to revoke and create invitations and to change privilege
+ *   levels on invitations for individuals. If the user is a member of the same group,
+ *   (e.g. the same business) as the shared notebook, they will additionally be granted
+ *   permissions to update the publishing status of the notebook.
+ */
+enum ShareRelationshipPrivilegeLevel {
+  READ_NOTEBOOK                  = 0,
+  READ_NOTEBOOK_PLUS_ACTIVITY    = 10,
+  MODIFY_NOTEBOOK_PLUS_ACTIVITY  = 20,
+  FULL_ACCESS                    = 30,
+}
+
+/**
+ * Describes an invitation to a person to use their Evernote
+ * credentials to become a member of a notebook.
+ *
+ * <dl>
+ * <dt>displayName</dt>
+ * <dd>The string that clients should show to users to represent this
+ * invitation.</dd>
+ *
+ * <dt>recipientUserIdentity</dt>
+ * <dd>Identifies the recipient of the invitation. The user identity
+ * type can be either EMAIL or IDENTITYID, depending on whether the
+ * invitation was created using the classic notebook sharing APIs or
+ * the new identity-based notebook sharing APIs.
+ * </dd>
+ *
+ * <dt>privilege</dt>
+ * <dd>The privilege level at which the member will be joined, if it
+ * turns out that the member is not already joined at a higher level.
+ * Note that the <tt>identity</tt> field may not uniquely identify an
+ * Evernote User ID, and so we won't know until the invitation is
+ * redeemed whether or not the recipient already has privilege.</dd>
+ *
+ * <dt>sharerUserId</dt>
+ * <dd>The user id of the user who most recently shared this notebook
+ * to this identity. This field is used by the service to convey information
+ * to the user, so clients should treat it as read-only.</dd>
+ * </dl>
+ */
+struct InvitationShareRelationship {
+  1: optional string displayName,
+  2: optional Types.UserIdentity recipientUserIdentity,
+  3: optional ShareRelationshipPrivilegeLevel privilege,
+  5: optional Types.UserID sharerUserId
+}
+
+/**
+ * Describes the association between a Notebook and an Evernote User who is
+ * a member of that notebook.
+ *
+ * <dl>
+ * <dt>displayName</dt>
+ * <dd>The string that clients should show to users to represent this
+ * member.</dd>
+ *
+ * <dt>recipientUserId</dt>
+ * <dd>The Evernote User ID of the recipient of this notebook share.
+ * </dd>
+ *
+ * <dt>bestPrivilege</dt>
+ * <dd>The privilege at which the member can access the notebook,
+ * which is the best privilege granted either individually or to a
+ * group to which a member belongs, such as a business.  This field is
+ * used by the service to convey information to the user, so clients
+ * should treat it as read-only.</dd>
+ *
+ * <dt>individualPrivilege</dt>
+ * <dd>The individually granted privilege for the member, which does
+ * not take GROUP privileges into account.  This value may be unset if
+ * only a group-assigned privilege has been granted to the member.
+ * This value can be managed by others with sufficient rights using
+ * the manageNotebookShares method.  The valid values that clients
+ * should present to users for selection are given via the the
+ * 'restrictions' field.</dd>
+ *
+ * <dt>restrictions</dt>
+ * <dd>The restrictions on which privileges may be individually
+ * assigned to the recipient of this share relationship.</dd>
+ *
+ * <dt>sharerUserId</dt>
+ * <dd>The user id of the user who most recently shared the notebook
+ * to this user. This field is currently unset for a MemberShareRelationship
+ * created by joining a notebook that has been published to the business
+ * (MemberShareRelationships where the individual privilege is unset).
+ * This field is used by the service to convey information to the user, so
+ * clients should treat it as read-only.
+ * </dd>
+ * </dl>
+ */
+struct MemberShareRelationship {
+  1: optional string displayName,
+  2: optional Types.UserID recipientUserId,
+  3: optional ShareRelationshipPrivilegeLevel bestPrivilege,
+  4: optional ShareRelationshipPrivilegeLevel individualPrivilege,
+  5: optional ShareRelationshipRestrictions restrictions,
+  6: optional Types.UserID sharerUserId
+}
+
+/**
+ * Captures a collection of share relationships for a notebook, for
+ * example, as returned by the getNotebookShares method.  The share
+ * relationships fall into two broad categories: members, and
+ * invitations that can be used to become members.
+ *
+ * <dl>
+ * <dt>invitations</dt>
+ * <dd>A list of open invitations that can be redeemed into
+ * memberships to the notebook.</dd>
+ *
+ * <dt>memberships</dt>
+ * <dd>A list of memberships of the notebook.  A member is identified
+ * by their Evernote UserID and has rights to access the
+ * notebook.</dd>
+ *
+ * <dt>invitationRestrictions</dt>
+ * <dd>The restrictions on what privileges may be granted to invitees
+ * to this notebook. These restrictions may be specific to the calling
+ * user or to the notebook itself. They represent the
+ * union of all possible invite cases, so it is possible that once the
+ * recipient of the invitation has been identified by the service, such
+ * as by a business auto-join, the actual assigned privilege may change.
+ * </dd>
+ * </dl>
+ */
+struct ShareRelationships {
+  1: optional list<InvitationShareRelationship> invitations,
+  2: optional list<MemberShareRelationship> memberships,
+  3: optional ShareRelationshipRestrictions invitationRestrictions
+}
+
+/**
+ * A structure that captures parameters used by clients to manage the
+ * shares for a given notebook via the manageNotebookShares method.
+ *
+ * <dl>
+ * <dt>notebookGuid</dt>
+ * <dd>The GUID of the notebook whose shares are being managed.</dd>
+ *
+ * <dt>inviteMessage</dt>
+ * <dd>If the service sends a message to invitees, this parameter will
+ * be used to form the actual message that is sent.</dd>
+ *
+ * <dt>membershipsToUpdate</dt>
+ * <dd>The list of existing memberships to update.  This field is not
+ * intended to be the full set of memberships for the notebook and
+ * should only include those already-existing memberships that you
+ * actually want to change.  If you want to remove shares, see the
+ * unshares fields.  If you want to create a membership,
+ * i.e. auto-join a business user, you can do this via the
+ * invitationsToCreateOrUpdate field using an Evernote UserID of a
+ * fellow business member (the created invitation is automatically
+ * joined by the service, so the client is creating an
+ * invitation, not a membership).</dd>
+ *
+ * <dt>invitationsToCreateOrUpdate</dt>
+ * <dd>The list of invitations to update, as matched by the identity
+ * field of the InvitationShareRelationship instances, or to create if
+ * an existing invitation does not exist.  This field is not intended
+ * to be the full set of invitations on the notebook and should only
+ * include those invitations that you wish to create or update.  Note
+ * that your invitation could convert into a membership via a
+ * service-supported auto-join operation.  This happens, for example,
+ * when you use an invitation with an Evernote UserID type for a
+ * recipient who is a member of the business to which the notebook
+ * belongs.  Note that to discover the user IDs for business members,
+ * the sharer must also be part of the business.</dd>
+ *
+ * <dt>unshares</dt>
+ * <dd>The list of share relationships to expunge from the service.
+ * If the user identity is for an Evernote UserID, then memberships will
+ * be removed. If it's an e-mail, then e-mail based shared notebook
+ * invitations will be removed. If it's for an Identity ID, then
+ * any invitations that match the identity (by identity ID or user ID or
+ * e-mail for legacy invitations) will be removed.</dd>
+ * </dl>
+ */
+struct ManageNotebookSharesParameters {
+  1: optional string notebookGuid,
+  2: optional string inviteMessage,
+  3: optional list<MemberShareRelationship> membershipsToUpdate,
+  4: optional list<InvitationShareRelationship> invitationsToCreateOrUpdate,
+  5: optional list<Types.UserIdentity> unshares
+}
+
+/**
+ * A structure to capture certain errors that occurred during a call
+ * to manageNotebookShares.  That method can be run best-effort,
+ * meaning that some change requests can be applied while others fail.
+ * Note that some errors such as system errors will still fail the
+ * entire transaction regardless of running best effort.  When some
+ * change requests do not succeed, the error conditions are captured
+ * in instances of this class, captured by the identity of the share
+ * relationship and one of the exception fields.
+ *
+ * <dl>
+ * <dt>userIdentity</dt>
+ * <dd>The identity of the share relationship whose update encountered
+ * an error.</dd>
+ *
+ * <dt>userException</dt>
+ * <dd>If the error is represented as an EDAMUserException that would
+ * have otherwise been thrown without best-effort execution.  Only one
+ * exception field will be set.</dd>
+ *
+ * <dt>notFoundException</dt>
+ * <dd>If the error is represented as an EDAMNotFoundException that would
+ * have otherwise been thrown without best-effort execution.  Only one
+ * exception field will be set.</dd>
+ * </dl>
+ */
+struct ManageNotebookSharesError {
+  1: optional Types.UserIdentity userIdentity,
+  2: optional Errors.EDAMUserException userException,
+  3: optional Errors.EDAMNotFoundException notFoundException
+}
+
+/**
+ * The return value of a call to the manageNotebookShares method.
+ *
+ * <dl>
+ * <dt>errors</dt>
+ * <dd>If the method completed without throwing exceptions, some errors
+ * might still have occurred, and in that case, this field will contain
+ * the list of those errors the occurred.
+ * </dd>
+ * </dl>
+ */
+struct ManageNotebookSharesResult {
+  1: optional list<ManageNotebookSharesError> errors
+}
+
+/**
+ * A structure used to share a note with one or more recipients at a given privilege.
+ *
+ * <dl>
+ *   <dt>noteGuid</dt>
+ *   <dd>The GUID of the note.</dd>
+ *
+ *   <dt>recipientThreadId</dt>
+ *   <dd>The recipients of the note share specified as a messaging thread ID. If you
+ *       have an existing messaging thread to share the note with, specify its ID
+ *       here instead of recipientContacts in order to properly support defunct
+ *       identities. The sharer must be a participant of the thread. Either this
+ *       field or recipientContacts must be set.</dd>
+ *
+ *   <dt>recipientContacts</dt>
+ *   <dd>The recipients of the note share specified as a list of contacts. This should
+ *       only be set if the sharing takes place before the thread is created. Use
+ *       recipientThreadId instead when sharing with an existing thread. Either this
+ *       field or recipientThreadId must be set.</dd>
+ *
+ *   <dt>privilege</dt>
+ *   <dd>The privilege level to be granted.</dd>
+ * </dl>
+ */
+struct SharedNoteTemplate {
+  1: optional Types.Guid noteGuid,
+  4: optional Types.MessageThreadID recipientThreadId,
+  2: optional list<Types.Contact> recipientContacts,
+  3: optional Types.SharedNotePrivilegeLevel privilege
+}
+
+/**
+ * A structure used to share a notebook with one or more recipients at a given privilege.
+ *
+ * <dl>
+ *   <dt>notebookGuid</dt>
+ *   <dd>The GUID of the notebook.</dd>
+ *
+ *   <dt>recipientThreadId</dt>
+ *   <dd>The recipients of the notebook share specified as a messaging thread ID. If you
+ *       have an existing messaging thread to share the note with, specify its ID
+ *       here instead of recipientContacts in order to properly support defunct
+ *       identities. The sharer must be a participant of the thread. Either this field
+ *       or recipientContacts must be set.</dd>
+ *
+ *   <dt>recipientContacts</dt>
+ *   <dd>The recipients of the notebook share specified as a list of contacts. This should
+ *       only be set if the sharing takes place before the thread is created. Use
+ *       recipientThreadId instead when sharing with an existing thread. Either this
+ *       field or recipientThreadId must be set.</dd>
+ *
+ *   <dt>privilege</dt>
+ *   <dd>The privilege level to be granted.</dd>
+ * </dl>
+ */
+struct NotebookShareTemplate {
+  1: optional Types.Guid notebookGuid,
+  4: optional Types.MessageThreadID recipientThreadId,
+  2: optional list<Types.Contact> recipientContacts,
+  3: optional Types.SharedNotebookPrivilegeLevel privilege
+}
+
+/**
+ * A structure containing the results of a call to createOrUpdateNotebookShares.
+ *
+ * <dl>
+ *   <dt>updateSequenceNum</dt>
+ *   <dd>The USN of the notebook after the call.</dd>
+ *
+ *   <dt>matchingShares</dt>
+ *   <dd>A list of SharedNotebook records that match the desired recipients. These
+ *       records may have been either created or updated by the call to
+ *       createOrUpdateNotebookShares, or they may have been at the desired privilege
+ *       privilege level prior to the call.</dd>
+ * </dl>
+ */
+struct CreateOrUpdateNotebookSharesResult {
+  1: optional i32 updateSequenceNum,
+  2: optional list<Types.SharedNotebook> matchingShares
+}
+
+/**
+ * This structure is used by the service to communicate to clients, via
+ * getNoteShareRelationships, which privilege levels are assignable to the
+ * target of a note share relationship.
+ *
+ * <dl>
+ * <dt>noSetReadNote</dt>
+ * <dd>This value is true if the user is not allowed to set the privilege
+ * level to SharedNotePrivilegeLevel.READ_NOTE.</dd>
+ *
+ * <dt>noSetModifyNote</dt>
+ * <dd>This value is true if the user is not allowed to set the privilege
+ * level to SharedNotePrivilegeLevel.MODIFY_NOTE.</dd>
+ *
+ * <dt>noSetFullAccess</dt>
+ * <dd>This value is true if the user is not allowed to set the
+ * privilege level to SharedNotePrivilegeLevel.FULL_ACCESS.</dd>
+ * </dl>
+ */
+struct NoteShareRelationshipRestrictions {
+  1: optional bool noSetReadNote,
+  2: optional bool noSetModifyNote,
+  3: optional bool noSetFullAccess
+}
+
+/**
+ * Describes the association between a Note and an Evernote User who is
+ * a member of that note.
+ *
+ * <dl>
+ * <dt>displayName</dt>
+ * <dd>The string that clients should show to users to represent this
+ * member.</dd>
+ *
+ * <dt>recipientUserId</dt>
+ * <dd>The Evernote UserID of the user who is a member to the note.</dd>
+ *
+ * <dt>privilege</dt>
+ * <dd>The privilege at which the member can access the note,
+ * which is the best privilege granted to the user across all of their
+ * individual shares for this note. This field is used by the service
+ * to convey information to the user, so clients should treat it as
+ * read-only.</dd>
+ *
+ * <dt>restrictions</dt>
+ * <dd>The restrictions on which privileges may be individually
+ * assigned to the recipient of this share relationship. This field
+ * is used by the service to convey information to the user, so
+ * clients should treat it as read-only.</dd>
+ *
+ * <dt>sharerUserId</dt>
+ * <dd>The user id of the user who most recently shared the note with
+ * this user. This field is used by the service to convey information
+ * to the user, so clients should treat it as read-only.</dd>
+ * </dl>
+ */
+struct NoteMemberShareRelationship {
+ 1: optional string displayName,
+ 2: optional Types.UserID recipientUserId,
+ 3: optional Types.SharedNotePrivilegeLevel privilege,
+ 4: optional NoteShareRelationshipRestrictions restrictions,
+ 5: optional Types.UserID sharerUserId
+}
+
+/**
+ * Describes an invitation to a person to use their Evernote credentials
+ * to gain access to a note belonging to another user.
+ *
+ * <dl>
+ * <dt>displayName</dt>
+ * <dd>The string that clients should show to users to represent this
+ * invitation.</dd>
+ *
+ * <dt>recipientIdentityId</dt>
+ * <dd>Identifies the identity of the invitation recipient. Once the
+ * identity has been claimed by an Evernote user and they have accessed
+ * the note at least once, the invitation will be used up and will no
+ * longer be returned by the service to clients. Instead, that recipient
+ * will be included in the list of NoteMemberShareRelationships.</dd>
+ *
+ * <dt>privilege</dt>
+ * <dd>The privilege level that the recipient will be granted when they
+ * accept this invitation. If the user already has a higher privilege to
+ * access this note then this will not affect the recipient's privileges.</dd>
+ *
+ * <dt>sharerUserId</dt>
+ * <dd>The user id of the user who most recently shared this note to this
+ * recipient. This field is used by the service to convey information
+ * to the user, so clients should treat it as read-only.</dd>
+ */
+struct NoteInvitationShareRelationship {
+ 1: optional string displayName,
+ 2: optional Types.IdentityID recipientIdentityId,
+ 3: optional Types.SharedNotePrivilegeLevel privilege,
+ 5: optional Types.UserID sharerUserId
+}
+
+/**
+ * Captures a collection of share relationships for a single note,
+ * for example, as returned by the getNoteShares method. The share
+ * relationships fall into two broad categories: members, and
+ * invitations that can be used to become members.
+ *
+ * <dl>
+ * <dt>invitations</dt>
+ * <dd>A list of open invitations that can be redeemed into
+ * memberships to the note.</dd>
+ *
+ * <dt>memberships</dt>
+ * <dd>A list of memberships of the noteb. A member is identified
+ * by their Evernote UserID and has rights to access the
+ * note.</dd>
+ *
+ * <dt>restrictions</dt>
+ * <dd>The restrictions on which privileges may be assigned to the recipient
+ * of an open invitation. These restrictions only apply to invitations;
+ * restrictions on memberships are specified on the NoteMemberShareRelationship.
+ * This field is used by the service to convey information to the user, so
+ * clients should treat it as read-only.</dd>
+ *
+ * </dl>
+ */
+struct NoteShareRelationships {
+  1: optional list<NoteInvitationShareRelationship> invitations,
+  2: optional list<NoteMemberShareRelationship> memberships,
+  3: optional NoteShareRelationshipRestrictions invitationRestrictions
+}
+
+/**
+ * Captures parameters used by clients to manage the shares for a given
+ * note via the manageNoteShares function. This is used only to manage
+ * the existing memberships and invitations for a note. To invite a new
+ * recipient, use NoteStore.createOrUpdateSharedNotes.
+ *
+ * The only field of an existing membership or invitation that can be
+ * updated by this function is the share privilege.
+ *
+ * <dl>
+ *   <dt>noteGuid</dt>
+ *   <dd>The GUID of the note whose shares are being managed.</dd>
+ *
+ *   <dt>membershipsToUpdate</dt>
+ *   <dd>A list of existing memberships to update. This field is not
+ *     meant to be the full set of memberships for the note. Clients
+ *     should only include those existing memberships that they wish
+ *     to modify. To remove an existing membership, see the unshares
+ *     field.</dd>
+ *
+ *   <dt>invitationsToUpdate</dt>
+ *   <dd>The list of outstanding invitations to update, as matched by the
+ *     identity field of the NoteInvitationShareRelatioship instances.
+ *     This field is not meant to be the full set of invitations for the
+ *     note. Clients should only include those existing invitations that
+ *     they wish to modify.</dd>
+ *
+ *   <dt>membershipsToUnshare</dt>
+ *   <dd>A list of existing memberships to expunge from the service.</dd>
+ *
+ *   <dt>invitationsToUnshare</dt>
+ *   <dd>A list of outstanding invitations to expunge from the service.</dd>
+ * </dl>
+ */
+struct ManageNoteSharesParameters {
+ 1: optional string noteGuid,
+ 2: optional list<NoteMemberShareRelationship> membershipsToUpdate,
+ 3: optional list<NoteInvitationShareRelationship> invitationsToUpdate,
+ 4: optional list<Types.UserID> membershipsToUnshare
+ 5: optional list<Types.IdentityID> invitationsToUnshare
+}
+
+/**
+ * Captures errors that occur during a call to manageNoteShares. That
+ * function can be run best-effort, meaning that some change requests can
+ * be applied while others fail. Note that some errors such as system
+ * exceptions may still cause the entire call to fail.
+ *
+ * Only one of the two ID fields will be set on a given error.
+ *
+ * Only one of the two exception fields will be set on a given error.
+ *
+ * <dl>
+ *   <dt>identityID</dt>
+ *   <dd>The identity ID of an outstanding invitation that was not updated
+ *     due to the error.</dd>
+ *
+ *   <dt>userID</dt>
+ *   <dd>The user ID of an existing membership that was not updated due
+ *     to the error.</dd>
+ *
+ *   <dt>userException</dt>
+ *   <dd>If the error is represented as an EDAMUserException that would
+ *     have otherwise been thrown without best-effort execution.</dd>
+ *
+ *   <dt>notFoundException</dt>
+ *   <dd>If the error is represented as an EDAMNotFoundException that
+ *     would have otherwise been thrown without best-effort execution.
+ *     The identifier field of the exception will be either "Identity.id"
+ *     or "User.id", indicating that no existing share could be found for
+ *     the specified recipient.</dd>
+ * </dl>
+ */
+struct ManageNoteSharesError {
+ 1: optional Types.IdentityID identityID,
+ 2: optional Types.UserID userID,
+ 3: optional Errors.EDAMUserException userException,
+ 4: optional Errors.EDAMNotFoundException notFoundException
+}
+
+/**
+ * The return value of a call to the manageNoteShares function.
+ *
+ * <dl>
+ *   <dt>errors</dt>
+ *   <dd>If the call succeeded without throwing an exception, some errors
+ *     might still have occurred. In that case, this field will contain the
+ *     list of errors.</dd>
+ * </dl>
+ */
+struct ManageNoteSharesResult {
+ 1: optional list<ManageNoteSharesError> errors
+}
+
+/**
  * Service:  NoteStore
  * <p>
  * The NoteStore service is used by EDAM clients to exchange information
- * about the collection of notes in an account.  This is primarily used for
+ * about the collection of notes in an account. This is primarily used for
  * synchronization, but could also be used by a "thin" client without a full
  * local cache.
  * </p><p>
- * All functions take an "authenticationToken" parameter, which is the
+ * Most functions take an "authenticationToken" parameter, which is the
  * value returned by the UserStore which permits access to the account.
- * This parameter is mandatory for all functions.
  * </p>
  *
  * Calls which require an authenticationToken may throw an EDAMUserException
  * for the following reasons:
  *  <ul>
- *   <li> AUTH_EXPIRED "authenticationToken" - token has expired
- *   </li>
- *   <li> BAD_DATA_FORMAT "authenticationToken" - token is malformed
- *   </li>
- *   <li> DATA_REQUIRED "authenticationToken" - token is empty
- *   </li>
- *   <li> INVALID_AUTH "authenticationToken" - token signature is invalid
- *   </li>
+ *   <li>DATA_REQUIRED "authenticationToken" - token is empty</li>
+ *   <li>BAD_DATA_FORMAT "authenticationToken" - token is malformed</li>
+ *   <li>INVALID_AUTH "authenticationToken" - token signature is invalid</li>
+ *   <li>AUTH_EXPIRED "authenticationToken" - token has expired or been revoked</li>
+ *   <li>PERMISSION_DENIED "authenticationToken" - token does not grant permission
+ *       to perform the requested action</li>
+ *   <li>BUSINESS_SECURITY_LOGIN_REQUIRED "sso" - the user is a member of a business
+ *       that requires single sign-on, and must complete SSO before accessing business
+ *       content.
  * </ul>
  */
 service NoteStore {
@@ -900,31 +1711,6 @@ service NoteStore {
    * account corresponding to the provided authentication token.
    */
   SyncState getSyncState(1: string authenticationToken)
-    throws (1: Errors.EDAMUserException userException,
-            2: Errors.EDAMSystemException systemException),
-
-  /**
-   * Asks the NoteStore to provide information about the status of the user
-   * account corresponding to the provided authentication token.
-   * This version of 'getSyncState' allows the client to upload coarse-
-   * grained usage metrics to the service.
-   *
-   * @param clientMetrics  see the documentation of the ClientUsageMetrics
-   *   structure for an explanation of the fields that clients can pass to
-   *   the service.
-   */
-  SyncState getSyncStateWithMetrics(1: string authenticationToken,
-                                    2: ClientUsageMetrics clientMetrics)
-    throws (1: Errors.EDAMUserException userException,
-            2: Errors.EDAMSystemException systemException),
-
-  /**
-   * DEPRECATED - use getFilteredSyncChunk.
-   */
-  SyncChunk getSyncChunk(1: string authenticationToken,
-                         2: i32 afterUSN,
-                         3: i32 maxEntries,
-                         4: bool fullSyncOnly)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMSystemException systemException),
 
@@ -968,7 +1754,6 @@ service NoteStore {
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMSystemException systemException),
 
-
   /**
    * Asks the NoteStore to provide information about the status of a linked
    * notebook that has been shared with the caller, or that is public to the
@@ -989,6 +1774,26 @@ service NoteStore {
    * @param linkedNotebook
    *   This structure should contain identifying information and permissions
    *   to access the notebook in question.
+   *
+   * @throws EDAMUserException <ul>
+   *   <li>DATA_REQUIRED "LinkedNotebook.username" - The username field must be
+   *       populated with the current username of the owner of the notebook for which
+   *       you are obtaining sync state.
+   *   </li>
+   * </ul>
+   *
+   * @throws EDAMNotFoundException <ul>
+   *   <li>"LinkedNotebook.username" - If the LinkedNotebook.username field does not
+   *       correspond to a current user on the service.
+   *   </li>
+   * </ul>
+   *
+   * @throws SystemException <ul>
+   *   <li>SHARD_UNAVAILABLE - If the provided LinkedNotebook.username corresponds to a
+   *       user whose account is on a shard other than that on which this method was
+   *       invoked.
+   *   </li>
+   * </ul>
    */
   SyncState getLinkedNotebookSyncState(1: string authenticationToken,
                                        2: Types.LinkedNotebook linkedNotebook)
@@ -1079,6 +1884,23 @@ service NoteStore {
             2: Errors.EDAMSystemException systemException),
 
   /**
+   * Returns a list of all the notebooks in a business that the user has permission to access,
+   * regardless of whether the user has joined them. This includes notebooks that have been shared
+   * with the entire business as well as notebooks that have been shared directly with the user.
+   *
+   * @param authenticationToken A business authentication token obtained by calling
+   *   UserStore.authenticateToBusiness.
+   *
+   * @throws EDAMUserException <ul>
+   *   <li> INVALID_AUTH "authenticationToken" - if the authentication token is not a
+   *     business auth token.</li>
+   * </ul>
+   */
+  list<Types.Notebook> listAccessibleBusinessNotebooks(1: string authenticationToken)
+    throws (1: Errors.EDAMUserException userException,
+            2: Errors.EDAMSystemException systemException),
+
+  /**
    * Returns the current state of the notebook with the provided GUID.
    * The notebook may be active or deleted (but not expunged).
    *
@@ -1126,22 +1948,18 @@ service NoteStore {
    *   saved in this object's 'guid' field.
    *
    * @throws EDAMUserException <ul>
-   *   <li> BAD_DATA_FORMAT "Notebook.name" - invalid length or pattern
-   *   </li>
-   *   <li> BAD_DATA_FORMAT "Notebook.stack" - invalid length or pattern
-   *   </li>
-   *   <li> BAD_DATA_FORMAT "Publishing.uri" - if publishing set but bad uri
-   *   </li>
-   *   <li> BAD_DATA_FORMAT "Publishing.publicDescription" - if too long
-   *   </li>
-   *   <li> DATA_CONFLICT "Notebook.name" - name already in use
-   *   </li>
-   *   <li> DATA_CONFLICT "Publishing.uri" - if URI already in use
-   *   </li>
-   *   <li> DATA_REQUIRED "Publishing.uri" - if publishing set but uri missing
-   *   </li>
-   *   <li> LIMIT_REACHED "Notebook" - at max number of notebooks
-   *   </li>
+   *   <li> BAD_DATA_FORMAT "Notebook.name" - invalid length or pattern</li>
+   *   <li> BAD_DATA_FORMAT "Notebook.stack" - invalid length or pattern</li>
+   *   <li> BAD_DATA_FORMAT "Publishing.uri" - if publishing set but bad uri</li>
+   *   <li> BAD_DATA_FORMAT "Publishing.publicDescription" - if too long</li>
+   *   <li> DATA_CONFLICT "Notebook.name" - name already in use</li>
+   *   <li> DATA_CONFLICT "Publishing.uri" - if URI already in use</li>
+   *   <li> DATA_REQUIRED "Publishing.uri" - if publishing set but uri missing</li>
+   *   <li> DATA_REQUIRED "Notebook" - notebook parameter was null</li>
+   *   <li> PERMISSION_DENIED "Notebook.defaultNotebook" - if the 'defaultNotebook' field
+   *        is set to 'true' for a Notebook that is not owned by the user identified by
+   *        the passed authenticationToken.</li>
+   *   <li> LIMIT_REACHED "Notebook" - at max number of notebooks</li>
    * </ul>
    */
   Types.Notebook createNotebook(1: string authenticationToken,
@@ -1160,20 +1978,17 @@ service NoteStore {
    *   The Update Sequence Number for this change within the account.
    *
    * @throws EDAMUserException <ul>
-   *   <li> BAD_DATA_FORMAT "Notebook.name" - invalid length or pattern
-   *   </li>
-   *   <li> BAD_DATA_FORMAT "Notebook.stack" - invalid length or pattern
-   *   </li>
-   *   <li> BAD_DATA_FORMAT "Publishing.uri" - if publishing set but bad uri
-   *   </li>
-   *   <li> BAD_DATA_FORMAT "Publishing.publicDescription" - if too long
-   *   </li>
-   *   <li> DATA_CONFLICT "Notebook.name" - name already in use
-   *   </li>
-   *   <li> DATA_CONFLICT "Publishing.uri" - if URI already in use
-   *   </li>
-   *   <li> DATA_REQUIRED "Publishing.uri" - if publishing set but uri missing
-   *   </li>
+   *   <li> BAD_DATA_FORMAT "Notebook.name" - invalid length or pattern</li>
+   *   <li> BAD_DATA_FORMAT "Notebook.stack" - invalid length or pattern</li>
+   *   <li> BAD_DATA_FORMAT "Publishing.uri" - if publishing set but bad uri</li>
+   *   <li> BAD_DATA_FORMAT "Publishing.publicDescription" - if too long</li>
+   *   <li> DATA_CONFLICT "Notebook.name" - name already in use</li>
+   *   <li> DATA_CONFLICT "Publishing.uri" - if URI already in use</li>
+   *   <li> DATA_REQUIRED "Publishing.uri" - if publishing set but uri missing</li>
+   *   <li> DATA_REQUIRED "Notebook" - notebook parameter was null</li>
+   *   <li> PERMISSION_DENIED "Notebook.defaultNotebook" - if the 'defaultNotebook' field
+   *        is set to 'true' for a Notebook that is not owned by the user identified by
+   *        the passed authenticationToken.</li>
    * </ul>
    *
    * @throws EDAMNotFoundException <ul>
@@ -1375,7 +2190,7 @@ service NoteStore {
   /**
    * Permanently deletes the tag with the provided GUID, if present.
    * <p/>
-   * NOTE: This function is generally not available to third party applications.
+   * NOTE: This function is not generally available to third party applications.
    * Calls will result in an EDAMUserException with the error code
    * PERMISSION_DENIED.
    *
@@ -1529,17 +2344,6 @@ service NoteStore {
             3: Errors.EDAMNotFoundException notFoundException),
 
   /**
-   * DEPRECATED. Use findNotesMetadata.
-   */
-  NoteList findNotes(1: string authenticationToken,
-                     2: NoteFilter filter,
-                     3: i32 offset,
-                     4: i32 maxNotes)
-    throws (1: Errors.EDAMUserException userException,
-            2: Errors.EDAMSystemException systemException,
-            3: Errors.EDAMNotFoundException notFoundException),
-
-  /**
    * Finds the position of a note within a sorted subset of all of the user's
    * notes. This may be useful for thin clients that are displaying a paginated
    * listing of a large account, which need to know where a particular note
@@ -1609,10 +2413,12 @@ service NoteStore {
    *   pagination.
    *
    * @param maxNotes
-   *   The mximum notes to return in this query.  The service will return a set
+   *   The maximum notes to return in this query.  The service will return a set
    *   of notes that is no larger than this number, but may return fewer notes
    *   if needed.  The NoteList.totalNotes field in the return value will
    *   indicate whether there are more values available after the returned set.
+   *   Currently, the service will not return more than 250 notes in a single request,
+   *   but this number may change in the future.
    *
    * @param resultSpec
    *   This specifies which information should be returned for each matching
@@ -1622,6 +2428,7 @@ service NoteStore {
    *
    * @return
    *   The list of notes that match the criteria.
+   *   The Notes.sharedNotes field will not be set.
    *
    * @throws EDAMUserException <ul>
    *   <li> BAD_DATA_FORMAT "offset" - not between 0 and EDAM_USER_NOTES_MAX
@@ -1650,6 +2457,7 @@ service NoteStore {
             2: Errors.EDAMSystemException systemException,
             3: Errors.EDAMNotFoundException notFoundException),
 
+
   /**
    * This function is used to determine how many notes are found for each
    * notebook and tag in the user's account, given a current set of filter
@@ -1673,16 +2481,12 @@ service NoteStore {
    *   and supplied in the reply. Otherwise, the trash value will be omitted.
    *
    * @throws EDAMUserException <ul>
-   *   <li> BAD_DATA_FORMAT "NoteFilter.notebookGuid" - if malformed
-   *   </li>
-   *   <li> BAD_DATA_FORMAT "NoteFilter.notebookGuids" - if any are malformed
-   *   </li>
-   *   <li> BAD_DATA_FORMAT "NoteFilter.words" - if search string too long
-   *   </li>
+   *   <li>BAD_DATA_FORMAT "NoteFilter.notebookGuid" - if malformed</li>
+   *   <li>BAD_DATA_FORMAT "NoteFilter.notebookGuids" - if any are malformed</li>
+   *   <li>BAD_DATA_FORMAT "NoteFilter.words" - if search string too long</li>
    *
    * @throws EDAMNotFoundException <ul>
-   *   <li> "Notebook.guid" - not found, by GUID
-   *   </li>
+   *   <li> "Notebook.guid" - not found, by GUID</li>
    * </ul>
    */
   NoteCollectionCounts findNoteCounts(1: string authenticationToken,
@@ -1702,25 +2506,14 @@ service NoteStore {
    * will be ignored (so it could be an empty string).  The applicationData
    * fields are returned as keysOnly.
    *
+   * @param authenticationToken
+   *   An authentication token that grants the caller access to the requested note.
+   *
    * @param guid
    *   The GUID of the note to be retrieved.
    *
-   * @param withContent
-   *   If true, the note will include the ENML contents of its
-   *   'content' field.
-   *
-   * @param withResourcesData
-   *   If true, any Resource elements in this Note will include the binary
-   *   contents of their 'data' field's body.
-   *
-   * @param withResourcesRecognition
-   *   If true, any Resource elements will include the binary contents of the
-   *   'recognition' field's body if recognition data is present.
-   *
-   * @param withResourcesAlternateData
-   *   If true, any Resource elements in this Note will include the binary
-   *   contents of their 'alternateData' fields' body, if an alternate form
-   *   is present.
+   * @param resultSpec
+   *   A structure specifying the fields of the note that the caller would like to get.
    *
    * @throws EDAMUserException <ul>
    *   <li> BAD_DATA_FORMAT "Note.guid" - if the parameter is missing
@@ -1733,6 +2526,20 @@ service NoteStore {
    *   <li> "Note.guid" - not found, by GUID
    *   </li>
    * </ul>
+   */
+  Types.Note getNoteWithResultSpec(1: string authenticationToken,
+                                   2: Types.Guid guid,
+                                   3: NoteResultSpec resultSpec)
+    throws (1: Errors.EDAMUserException userException,
+            2: Errors.EDAMSystemException systemException,
+            3: Errors.EDAMNotFoundException notFoundException),
+
+  /**
+   * DEPRECATED. See getNoteWithResultSpec.
+   *
+   * This function is equivalent to getNoteWithResultSpec, with each of the boolean parameters
+   * mapping to the equivalent field of a NoteResultSpec. The Note.sharedNotes field is never
+   * populated on the returned note. To get a note with its shares, use getNoteWithResultSpec.
    */
   Types.Note getNote(1: string authenticationToken,
                      2: Types.Guid guid,
@@ -1999,7 +2806,8 @@ service NoteStore {
    *   resources is not being modified, note.resources should be left unset.
    *
    * @return
-   *   The metadata (no contents) for the Note on the server after the update
+   *   The metadata (no contents) for the Note on the server after the update.
+   *   The Note.sharedNotes field will not be set.
    *
    * @throws EDAMUserException <ul>
    *   <li> BAD_DATA_FORMAT "Note.title" - invalid length or pattern
@@ -2030,9 +2838,12 @@ service NoteStore {
    *   </li>
    *   <li> LIMIT_REACHED "ResourceAttribute.*" - attribute string too long
    *   </li>
-   *   <li> PERMISSION_DENIED "Note" - user doesn't own
-   *   </li>
    *   <li> PERMISSION_DENIED "Note.notebookGuid" - user doesn't own destination
+   *   <li> PERMISSION_DENIED "Note.tags" - user doesn't have permission to
+   *     modify the note's tags. note.tags must be unset.
+   *   </li>
+   *   <li> PERMISSION_DENIED "Note.attributes" - user doesn't have permission
+   *     to modify the note's attributes. note.attributes must be unset.
    *   </li>
    *   <li> QUOTA_REACHED "Accounting.uploadLimit" - note exceeds upload quota
    *   </li>
@@ -2120,62 +2931,6 @@ service NoteStore {
             3: Errors.EDAMNotFoundException notFoundException),
 
   /**
-   * Permanently removes a list of Notes, and all of their Resources, from
-   * the service.  This should be invoked with a small number of Note GUIDs
-   * (e.g. 100 or less) on each call.  To expunge a larger number of notes,
-   * call this method multiple times.  This should also be used to reduce the
-   * number of Notes in a notebook before calling expungeNotebook() or
-   * in the trash before calling expungeInactiveNotes(), since these calls may
-   * be prohibitively slow if there are more than a few hundred notes.
-   * If an exception is thrown for any of the GUIDs, then none of the notes
-   * will be deleted.  I.e. this call can be treated as an atomic transaction.
-   * <p/>
-   * NOTE: This function is not available to third party applications.
-   * Calls will result in an EDAMUserException with the error code
-   * PERMISSION_DENIED.
-   *
-   * @param noteGuids
-   *   The list of GUIDs for the Notes to remove.
-   *
-   * @return
-   *   The account's updateCount at the end of this operation
-   *
-   * @throws EDAMUserException <ul>
-   *   <li> PERMISSION_DENIED "Note" - user doesn't own
-   *   </li>
-   * </ul>
-   *
-   * @throws EDAMNotFoundException <ul>
-   *   <li> "Note.guid" - not found, by GUID
-   *   </li>
-   * </ul>
-   */
-  i32 expungeNotes(1: string authenticationToken,
-                    2: list<Types.Guid> noteGuids)
-    throws (1: Errors.EDAMUserException userException,
-            2: Errors.EDAMSystemException systemException,
-            3: Errors.EDAMNotFoundException notFoundException),
-
-  /**
-   * Permanently removes all of the Notes that are currently marked as
-   * inactive.  This is equivalent to "emptying the trash", and these Notes
-   * will be gone permanently.
-   * <p/>
-   * This operation may be relatively slow if the account contains a large
-   * number of inactive Notes.
-   * <p/>
-   * NOTE: This function is not available to third party applications.
-   * Calls will result in an EDAMUserException with the error code
-   * PERMISSION_DENIED.
-   *
-   * @return
-   *    The number of notes that were expunged.
-   */
-  i32 expungeInactiveNotes(1: string authenticationToken)
-    throws (1: Errors.EDAMUserException userException,
-            2: Errors.EDAMSystemException systemException),
-
-  /**
    * Performs a deep copy of the Note with the provided GUID 'noteGuid' into
    * the Notebook with the provided GUID 'toNotebookGuid'.
    * The caller must be the owner of both the Note and the Notebook.
@@ -2186,6 +2941,9 @@ service NoteStore {
    * The copied note is considered as an "upload" for the purpose of upload
    * transfer limit calculation, so its size is added to the upload count for
    * the owner.
+   *
+   * If the original note has been shared and has SharedNote records, the shares
+   * are NOT copied.
    *
    * @param noteGuid
    *   The GUID of the Note to copy.
@@ -2228,16 +2986,18 @@ service NoteStore {
    * that are returned by this call can be used with getNoteVersion to retrieve
    * the previous note.
    * The identifiers will be listed from the most recent versions to the oldest.
+   * This call is only available for notes in Premium accounts. (I.e. access
+   * to past versions of Notes is a Premium-only feature.)
    *
    * @throws EDAMUserException <ul>
-   *   <li> BAD_DATA_FORMAT "Note.guid" - if the parameter is missing
+   *   <li> DATA_REQUIRED "Note.guid" - if GUID is null or empty string.
    *   </li>
-   *   <li> PERMISSION_DENIED "Note" - private note, user doesn't own
+   *   <li> BAD_DATA_FORMAT "Note.guid" - if GUID is not of correct length.
    *   </li>
    * </ul>
    *
    * @throws EDAMNotFoundException <ul>
-   *   <li> "Note.guid" - not found, by GUID
+   *   <li> "Note.guid" - not found, by GUID.
    *   </li>
    * </ul>
    */
@@ -2253,7 +3013,7 @@ service NoteStore {
    * guid) and the version (via the updateSequenceNumber of that version).
    * to find a listing of the stored version USNs for a note, call
    * listNoteVersions.
-   * This call is only available for notes in Premium accounts.  (I.e. access
+   * This call is only available for notes in Premium accounts. (I.e. access
    * to past versions of Notes is a Premium-only feature.)
    *
    * @param noteGuid
@@ -2276,18 +3036,14 @@ service NoteStore {
    *   is present.
    *
    * @throws EDAMUserException <ul>
-   *   <li> BAD_DATA_FORMAT "Note.guid" - if the parameter is missing
+   *   <li> DATA_REQUIRED "Note.guid" - if GUID is null or empty string.
    *   </li>
-   *   <li> PERMISSION_DENIED "Note" - private note, user doesn't own
-   *   </li>
-   *   <li> PERMISSION_DENIED "updateSequenceNum" -
-   *     The account isn't permitted to access previous versions of notes.
-   *     (i.e. this is a Free account.)
+   *   <li> BAD_DATA_FORMAT "Note.guid" - if GUID is not of correct length.
    *   </li>
    * </ul>
    *
    * @throws EDAMNotFoundException <ul>
-   *   <li> "Note.guid" - not found, by GUID
+   *   <li> "Note.guid" - not found, by GUID.
    *   </li>
    *   <li> "Note.updateSequenceNumber" - the Note doesn't have a version with
    *      the corresponding USN.
@@ -2666,45 +3422,41 @@ service NoteStore {
 
 
   /**
-   * Used to construct a shared notebook object. The constructed notebook will
-   * contain a "share key" which serve as a unique identifer and access token
-   * for a user to access the notebook of the shared notebook owner.
+   * @Deprecated for first-party clients. See createOrUpdateNotebookShares.
    *
-   * @param sharedNotebook
-   *   A shared notebook object populated with the email address of the share
-   *   recipient, the notebook guid and the access permissions. All other
-   *   attributes of the shared object are ignored. The SharedNotebook.allowPreview
-   *   field must be explicitly set with either a true or false value.
+   * Share a notebook with an email address, and optionally to a specific
+   * recipient. If an existing SharedNotebook associated with
+   * sharedNotebook.notebookGuid is found by recipientUsername or email, then
+   * the values of sharedNotebook will be used to update the existing record,
+   * else a new record will be created.
    *
-   * @return
-   *   The fully populated SharedNotebook object including the server assigned
-   *   share id and shareKey which can both be used to uniquely identify the
-   *   SharedNotebook.
+   * If recipientUsername is set and there is already a SharedNotebook
+   * for that Notebook with that recipientUsername and the privileges on the
+   * existing notebook are lower, than on this one, this will update the
+   * privileges and sharerUserId. If there isn't an existing SharedNotebook for
+   * recipientUsername, this will create and return a shared notebook for that
+   * email and recipientUsername. If recipientUsername is not set and there
+   * already is a SharedNotebook for a Notebook for that email address and the
+   * privileges on the existing SharedNotebook are lower than on this one, this
+   * will update the privileges and sharerUserId, and return the updated
+   * SharedNotebook. Otherwise, this will create and return a SharedNotebook for
+   * the email address.
    *
-   * @throws EDAMUserException <ul>
-   *   <li>BAD_DATA_FORMAT "SharedNotebook.email" - if the email was not valid</li>
-   *   <li>BAD_DATA_FORMAT "requireLogin" - if the SharedNotebook.allowPreview field was
-   *       not set, and the SharedNotebook.requireLogin was also not set or was set to 
-   *       false.</li>
-   *   <li>PERMISSION_DENIED "SharedNotebook.recipientSettings" - if
-   *       recipientSettings is set in the sharedNotebook.  Only the recipient
-   *       can set these values via the setSharedNotebookRecipientSettings
-   *       method.
-   *   </li>
-   *   </ul>
-   * @throws EDAMNotFoundException <ul>
-   *   <li>Notebook.guid - if the notebookGuid is not a valid GUID for the user.
-   *   </li>
-   *   </ul>
-   */
-  Types.SharedNotebook createSharedNotebook(1: string authenticationToken,
-                                            2: Types.SharedNotebook sharedNotebook)
-    throws (1: Errors.EDAMUserException userException,
-            2: Errors.EDAMNotFoundException notFoundException,
-            3: Errors.EDAMSystemException systemException),
-
-  /**
-   * Update a SharedNotebook object.
+   * If the authenticationToken is a Business auth token, recipientUsername is
+   * set and the recipient is in the same business as the business auth token,
+   * this method will also auto-join the business user to the SharedNotebook -
+   * that is it will set serviceJoined on the SharedNotebook and create a
+   * LinkedNotebook on the recipient's account pointing to the SharedNotebook.
+   * The LinkedNotebook creation happens out-of-band, so there will be a delay
+   * on the order of half a minute between the SharedNotebook and LinkedNotebook
+   * creation.
+   *
+   * Also handles sending an email to the email addresses: if a SharedNotebook
+   * is being created, this will send the shared notebook invite email, and
+   * if a SharedNotebook already exists, it will send the shared notebook
+   * reminder email. Both these emails contain a link to join the notebook.
+   * If the notebook is being auto-joined, it sends an email with that
+   * information to the recipient.
    *
    * @param authenticationToken
    *   Must be an authentication token from the owner or a shared notebook
@@ -2712,25 +3464,111 @@ service NoteStore {
    *   permissions to change invitations for a notebook.
    *
    * @param sharedNotebook
-   *  The SharedNotebook object containing the requested changes.
-   *  The "id" of the shared notebook must be set to allow the service
-   *  to identify the SharedNotebook to be updated. In addition, you MUST set
-   *  the email, permission, and allowPreview fields to the desired values.
-   *  All other fields will be ignored if set.
+   *   A shared notebook object populated with the email address of the share
+   *   recipient, the notebook guid and the access permissions. All other
+   *   attributes of the shared object are ignored. The SharedNotebook.allowPreview
+   *   field must be explicitly set with either a true or false value.
+   *
+   * @param message
+   *   The sharer-defined message to put in the email sent out.
    *
    * @return
-   *  The Update Serial Number for this change within the account.
+   *   The fully populated SharedNotebook object including the server assigned
+   *   globalId which can both be used to uniquely identify the SharedNotebook.
    *
    * @throws EDAMUserException <ul>
-   *   <li>UNSUPPORTED_OPERATION "updateSharedNotebook" - if this service instance does not support shared notebooks.</li>
-   *   <li>BAD_DATA_FORMAT "SharedNotebook.email" - if the email was not valid.</li>
-   *   <li>DATA_REQUIRED "SharedNotebook.id" - if the id field was not set.</li>
-   *   <li>DATA_REQUIRED "SharedNotebook.privilege" - if the privilege field was not set.</li>
-   *   <li>DATA_REQUIRED "SharedNotebook.allowPreview" - if the allowPreview field was not set.</li>
+   *   <li>BAD_DATA_FORMAT "SharedNotebook.email" - if the email was not valid</li>
+   *   <li>DATA_REQUIRED "SharedNotebook.privilege" - if the
+   *       SharedNotebook.privilegeLevel was not set.</li>
+   *   <li>BAD_DATA_FORMAT "SharedNotebook.requireLogin" - if requireLogin was
+   *       set. requireLogin is deprecated.</li>
+   *   <li>BAD_DATA_FORMAT "SharedNotebook.privilegeLevel" - if the
+   *       SharedNotebook.privilegeLevel field was unset or set to GROUP.</li>
+   *   <li>PERMISSION_DENIED "emailConfirmation" - if the email address on the
+   *       authenticationToken's owner's account is not confirmed.</li>
+   *   <li>PERMISSION_DENIED "SharedNotebook.recipientSettings" - if
+   *       recipientSettings is set in the sharedNotebook.  Only the recipient
+   *       can set these values via the setSharedNotebookRecipientSettings
+   *       method.</li>
+   *   <li>EDAMErrorCode.LIMIT_REACHED "SharedNotebook" - The notebook already has
+   *       EDAM_NOTEBOOK_SHARED_NOTEBOOK_MAX shares.</li>
    *   </ul>
    * @throws EDAMNotFoundException <ul>
-   *   <li>SharedNotebook.id - if no shared notebook with the specified ID was found.
+   *   <li>Notebook.guid - if the notebookGuid is not a valid GUID for the user.
+   *   </li>
    *   </ul>
+   */
+  Types.SharedNotebook shareNotebook(1: string authenticationToken,
+                                     2: Types.SharedNotebook sharedNotebook,
+                                     3: string message)
+    throws (1: Errors.EDAMUserException userException,
+            2: Errors.EDAMNotFoundException notFoundException,
+            3: Errors.EDAMSystemException systemException),
+
+  /**
+   * Share a notebook by a messaging thread ID or a list of contacts. This function is
+   * intended to be used in conjunction with Evernote messaging, and as such does not
+   * notify the recipient that a notebook has been shared with them.
+   *
+   * Sharing with a subset of participants on a thread is accomplished by specifying both
+   * a thread ID and a list of contacts. This ensures that even if those contacts are
+   * on the thread under a deactivated identity, the correct user (the one who has the
+   * given contact on the thread) receives the share.
+   *
+   * @param authenticationToken
+   *   An authentication token that grants the caller permission to share the notebook.
+   *   This should be an owner token if the notebook is owned by the caller.
+   *   If the notebook is a business notebook to which the caller has full access,
+   *   this should be their business authentication token. If the notebook is a shared
+   *   (non-business) notebook to which the caller has full access, this should be the
+   *   shared notebook authentication token returned by NoteStore.authenticateToNotebook.
+   *
+   * @param shareTemplate
+   *   Specifies the GUID of the notebook to be shared, the privilege at which the notebook
+   *   should be shared, and the recipient information.
+   *
+   * @return
+   *   A structure containing the USN of the Notebook after the change and a list of created
+   *   or updated SharedNotebooks.
+   *
+   * @throws EDAMUserException <ul>
+   *   <li>DATA_REQUIRED "Notebook.guid" - if no notebook GUID was specified</li>
+   *   <li>BAD_DATA_FORMAT "Notebook.guid" - if shareTemplate.notebookGuid is not a
+   *     valid GUID</li>
+   *   <li>DATA_REQUIRED "shareTemplate" - if the shareTemplate parameter was missing</li>
+   *   <li>DATA_REQUIRED "NotebookShareTemplate.privilege" - if no privilege was
+   *     specified</li>
+   *   <li>DATA_CONFLICT "NotebookShareTemplate.privilege" - if the specified privilege
+   *     is not allowed.</li>
+   *   <li>DATA_REQUIRED "NotebookShareTemplate.recipients" - if no recipients were
+   *     specified, either by thread ID or as a list of contacts</li>
+   *   <li>LIMIT_REACHED "SharedNotebook" - if the notebook has reached its maximum
+   *     number of shares</li>
+   * </ul>
+   *
+   * @throws EDAMInvalidContactsException <ul>
+   *   <li>"NotebookShareTemplate.recipients" - if one or more of the recipients specified
+   *     in shareTemplate.recipients was not syntactically valid, or if attempting to
+   *     share a notebook with an Evernote identity that the sharer does not have a
+   *     connection to. The exception will specify which recipients were invalid.</li>
+   * </ul>
+   *
+   * @throws EDAMNotFoundException <ul>
+   *   <li>"Notebook.guid" - if no notebook with the specified GUID was found</li>
+   *   <li>"NotebookShareTemplate.recipientThreadId" - if the recipient thread ID was
+   *     specified, but no thread with that ID exists</li>
+   * </ul>
+   */
+   CreateOrUpdateNotebookSharesResult
+     createOrUpdateNotebookShares(1: string authenticationToken,
+                                  2: NotebookShareTemplate shareTemplate)
+    throws (1: Errors.EDAMUserException userException,
+            2: Errors.EDAMNotFoundException notFoundException,
+            3: Errors.EDAMSystemException systemException
+            4: Errors.EDAMInvalidContactsException invalidContactsException),
+
+  /**
+   * @Deprecated See createOrUpdateNotebookShares and manageNotebookShares.
    */
   i32  updateSharedNotebook(1: string authenticationToken,
                             2: Types.SharedNotebook sharedNotebook)
@@ -2739,76 +3577,43 @@ service NoteStore {
             3: Errors.EDAMSystemException systemException),
 
   /**
-   * Set values for the recipient settings associated with a shared notebook.  Having
-   * update rights to the shared notebook record itself has no effect on this call;
-   * only the recipient of the shared notebook can can the recipient settings.
+   * Set values for the recipient settings associated with a notebook share. Only the
+   * recipient of the share can update their recipient settings.
    *
-   * If you do <i>not</i> wish to, or cannot, change one of the reminderNotifyEmail or
-   * reminderNotifyInApp fields, you must leave that field unset in recipientSettings.
-   * This method will skip that field for updates and leave the existing state as
+   * If you do <i>not</i> wish to, or cannot, change one of the recipient settings fields,
+   * you must leave that field unset in recipientSettings.
+   * This method will skip that field for updates and attempt to leave the existing value as
    * it is.
    *
-   * @return The update sequence number of the account to which the shared notebook
-   *   belongs, which is the account from which we are sharing a notebook.
+   * If recipientSettings.inMyList is false, both reminderNotifyInApp and reminderNotifyEmail
+   * will be either left as null or converted to false (if currently true).
    *
-   * @throws EDAMNotFoundException "sharedNotebookId" - Thrown if the service does not
-   *   have a shared notebook record for the sharedNotebookId on the given shard.  If you
-   *   receive this exception, it is probable that the shared notebook record has
-   *   been revoked or expired, or that you accessed the wrong shard.
+   * @param authenticationToken The owner authentication token for the recipient of the share.
    *
-   * @throws EDAMUserException <ul>
-   *   <li>PEMISSION_DENIED "authenticationToken" - If you do not have permission to set
-   *       the recipient settings for the shared notebook.  Only the recipient has
-   *       permission to do this.
-   *   <li>DATA_CONFLICT "recipientSettings.reminderNotifyEmail" - Setting whether
-   *       or not you want to receive reminder e-mail notifications is possible on
-   *       a business notebook in the business to which the user belongs.  All
-   *       others can safely unset the reminderNotifyEmail field from the
-   *       recipientSettings parameter.
-   * </ul>
-   */
-  i32 setSharedNotebookRecipientSettings(1: string authenticationToken,
-                                         2: i64 sharedNotebookId,
-                                         3: Types.SharedNotebookRecipientSettings recipientSettings)
-    throws (1: Errors.EDAMUserException userException,
-            2: Errors.EDAMNotFoundException notFoundException,
-            3: Errors.EDAMSystemException systemException),
-
-  /**
-   * Send a reminder message to some or all of the email addresses that a notebook has been
-   * shared with. The message includes the current link to view the notebook.
-   * @param authenticationToken
-   *   The auth token of the user with permissions to share the notebook
-   * @param notebookGuid
-   *   The guid of the shared notebook
-   * @param messageText
-   *  User provided text to include in the email
-   * @param recipients
-   *  The email addresses of the recipients. If this list is empty then all of the
-   *  users that the notebook has been shared with are emailed.
-   *  If an email address doesn't correspond to share invite members then that address
-   *  is ignored.
-   * @return
-   *  The number of messages sent
-   * @throws EDAMUserException <ul>
-   *   <li> LIMIT_REACHED "(recipients)" -
-   *     The email can't be sent because this would exceed the user's daily
-   *     email limit.
-   *   </li>
-   *   <li> PERMISSION_DENIED "Notebook.guid" - The user doesn't have permission to
-   *     send a message for the specified notebook.
-   *   </li>
-   * </ul>
+   * @return The updated Notebook with the new recipient settings. Note that some of the
+   * recipient settings may differ from what was requested. Clients should update their state
+   * based on this return value.
    *
    * @throws EDAMNotFoundException <ul>
-   *   <li> "Notebook.guid" - not found, by GUID
-   *   </li>
+   *   <li>Notebook.guid - Thrown if the service does not have a notebook record with the
+   *       notebookGuid on the given shard.</li>
+   *   <li>Publishing.publishState - Thrown if the business notebook is not shared with the
+   *       user and is also not published to their business.</li>
    * </ul>
-    */
-  i32 sendMessageToSharedNotebookMembers(1: string authenticationToken,
-                                          2: Types.Guid notebookGuid,
-                                          3: string messageText,
-                                          4: list<string> recipients)
+   *
+   * @throws EDAMUserException <ul>
+   *   <li>PEMISSION_DENIED "authenticationToken" - If the owner of the given token is not
+   *       allowed to set recipient settings on the specified notebook.</li>
+   *   <li>DATA_CONFLICT "recipientSettings.reminderNotifyEmail" - Setting reminderNotifyEmail
+   *       is allowed only for notebooks which belong to the same business as the user.</li>
+   *   <li>DATA_CONFLICT "recipientSettings.inMyList" - If the request is setting inMyList
+   *       to false and any of reminder* settings to true.</li>
+   * </ul>
+   */
+  Types.Notebook setNotebookRecipientSettings(
+      1: string authenticationToken,
+      2: string notebookGuid,
+      3: Types.NotebookRecipientSettings recipientSettings)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMNotFoundException notFoundException,
             3: Errors.EDAMSystemException systemException),
@@ -2821,27 +3626,6 @@ service NoteStore {
    *  The list of all SharedNotebooks for the user
    */
   list<Types.SharedNotebook> listSharedNotebooks(1: string authenticationToken)
-    throws (1: Errors.EDAMUserException userException,
-            2: Errors.EDAMNotFoundException notFoundException,
-            3: Errors.EDAMSystemException systemException),
-
-  /**
-   * Expunges the SharedNotebooks in the user's account using the
-   * SharedNotebook.id as the identifier.
-   * <p/>
-   * NOTE: This function is generally not available to third party applications.
-   * Calls will result in an EDAMUserException with the error code
-   * PERMISSION_DENIED.
-   *
-   * @param
-   *   sharedNotebookIds - a list of ShardNotebook.id longs identifying the
-   *       objects to delete permanently.
-   *
-   * @return
-   *   The account's update sequence number.
-   */
-  i32 expungeSharedNotebooks(1: string authenticationToken,
-                             2: list<i64> sharedNotebookIds)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMNotFoundException notFoundException,
             3: Errors.EDAMSystemException systemException),
@@ -2862,23 +3646,29 @@ service NoteStore {
    *   saved in this object's 'id' field.
    *
    * @throws EDAMUserException <ul>
-   *   <li> BAD_DATA_FORMAT "LinkedNotebook.name" - invalid length or pattern
+   *   <li> DATA_REQUIRED "LinkedNotebook.shareName" - missing shareName
+   *   <li> BAD_DATA_FORMAT "LinkedNotebook.name" - invalid shareName length or pattern
    *   </li>
    *   <li> BAD_DATA_FORMAT "LinkedNotebook.username" - bad username format
    *   </li>
    *   <li> BAD_DATA_FORMAT "LinkedNotebook.uri" -
    *     if public notebook set but bad uri
    *   </li>
-   *   <li> BAD_DATA_FORMAT "LinkedNotebook.shareKey" -
-   *     if private notebook set but bad shareKey
-   *   </li>
    *   <li> DATA_REQUIRED "LinkedNotebook.shardId" -
    *     if private notebook but shard id not provided
+   *   </li>
+   *   <li> BAD_DATA_FORMAT "LinkedNotebook.stack" - invalid stack name length or pattern
+   *   </li>
+   * </ul>
+   *
+   * @throws EDAMSystemException <ul>
+   *   <li> BAD_DATA_FORMAT "LinkedNotebook.sharedNotebookGlobalId" -
+   *     if a bad global identifer was set on a private notebook
    *   </li>
    * </ul>
    */
   Types.LinkedNotebook createLinkedNotebook(1: string authenticationToken,
-                                       2: Types.LinkedNotebook linkedNotebook)
+                                            2: Types.LinkedNotebook linkedNotebook)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMNotFoundException notFoundException,
             3: Errors.EDAMSystemException systemException),
@@ -2891,7 +3681,11 @@ service NoteStore {
    *   The Update Sequence Number for this change within the account.
    *
    * @throws EDAMUserException <ul>
-   *   <li> BAD_DATA_FORMAT "LinkedNotebook.name" - invalid length or pattern
+   *   <li> DATA_REQUIRED "LinkedNotebook.shareName" - missing shareName
+   *   </li>
+   *   <li> BAD_DATA_FORMAT "LinkedNotebook.shareName" - invalid shareName length or pattern
+   *   </li>
+   *   <li> BAD_DATA_FORMAT "LinkedNotebook.stack" - invalid stack name length or pattern
    *   </li>
    * </ul>
    */
@@ -2933,29 +3727,38 @@ service NoteStore {
    * calls to find and retrieve notes, and if the permissions in the shared
    * notebook are sufficient, to make changes to the contents of the notebook.
    *
-   * @param shareKey
-   *   The 'shareKey' identifier from the SharedNotebook that was granted to
-   *   some recipient.  This string internally encodes the notebook identifier
-   *   and a security signature.
+   * @param shareKeyOrGlobalId
+   *   May be one of the following:
+   *   <ul>
+   *     <li>A share key for a shared notebook that was granted to some recipient
+   *         Must be used if you are joining a notebook unless it was shared via
+   *         createOrUpdateNotebookShares. Share keys are delivered out-of-band
+   *         and are generally not available to clients. For security reasons,
+   *         share keys may be invalidated at the discretion of the service.
+   *     </li>
+   *     <li>The shared notebook global identifier. May be used to access a
+   *         notebook that is already joined.
+   *     </li>
+   *     <li>The Notebook GUID. May be used to access a notebook that was already
+   *         joined, or to access a notebook that was shared with the recipient
+   *         via createOrUpdateNotebookShares.
+   *     </li>
+   *   </ul>
    *
    * @param authenticationToken
    *   If a non-empty string is provided, this is the full user-based
    *   authentication token that identifies the user who is currently logged in
-   *   and trying to access the shared notebook.  This may be required if the
-   *   notebook was created with 'requireLogin'.
+   *   and trying to access the shared notebook.
    *   If this string is empty, the service will attempt to authenticate to the
    *   shared notebook without any logged in user.
    *
    * @throws EDAMSystemException <ul>
-   *   <li> BAD_DATA_FORMAT "shareKey" - invalid shareKey string
-   *   </li>
-   *   <li> INVALID_AUTH "shareKey" - bad signature on shareKey string
-   *   </li>
+   *   <li> BAD_DATA_FORMAT "shareKey" - invalid shareKey string</li>
+   *   <li> INVALID_AUTH "shareKey" - bad signature on shareKey string</li>
    * </ul>
    *
    * @throws EDAMNotFoundException <ul>
-   *   <li> "SharedNotebook.id" - the shared notebook no longer exists
-   *   </li>
+   *   <li> "SharedNotebook.id" - the shared notebook no longer exists</li>
    * </ul>
    *
    * @throws EDAMUserException <ul>
@@ -2968,12 +3771,11 @@ service NoteStore {
    * </ul>
    */
   UserStore.AuthenticationResult
-    authenticateToSharedNotebook(1: string shareKey,
+    authenticateToSharedNotebook(1: string shareKeyOrGlobalId,
                                  2: string authenticationToken)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMNotFoundException notFoundException,
             3: Errors.EDAMSystemException systemException),
-
 
   /**
    * This function is used to retrieve extended information about a shared
@@ -3061,7 +3863,7 @@ service NoteStore {
             3: Errors.EDAMSystemException systemException),
 
   /**
-   * If this note is not already shared (via its own direct URL), then this
+   * If this note is not already shared publicly (via its own direct URL), then this
    * will start sharing that note.
    * This will return the secret "Note Key" for this note that
    * can currently be used in conjunction with the Note's GUID to gain direct
@@ -3075,15 +3877,12 @@ service NoteStore {
    *   The GUID of the note to be shared.
    *
    * @throws EDAMUserException <ul>
-   *   <li> BAD_DATA_FORMAT "Note.guid" - if the parameter is missing
-   *   </li>
-   *   <li> PERMISSION_DENIED "Note" - private note, user doesn't own
-   *   </li>
+   *   <li> BAD_DATA_FORMAT "Note.guid" - if the parameter is missing</li>
+   *   <li> PERMISSION_DENIED "Note" - private note, user doesn't own</li>
    * </ul>
    *
    * @throws EDAMNotFoundException <ul>
-   *   <li> "Note.guid" - not found, by GUID
-   *   </li>
+   *   <li> "Note.guid" - not found, by GUID</li>
    * </ul>
    */
   string shareNote(1: string authenticationToken,
@@ -3093,24 +3892,25 @@ service NoteStore {
             3: Errors.EDAMSystemException systemException),
 
   /**
-   * If this note is not already shared then this will stop sharing that note
+   * If this note is shared publicly then this will stop sharing that note
    * and invalidate its "Note Key", so any existing URLs to access that Note
    * will stop working.
+   *
    * If the Note is not shared, then this function will do nothing.
+   *
+   * This function does not remove invididual shares for the note. To remove
+   * individual shares, see stopSharingNoteWithRecipients.
    *
    * @param guid
    *   The GUID of the note to be un-shared.
    *
    * @throws EDAMUserException <ul>
-   *   <li> BAD_DATA_FORMAT "Note.guid" - if the parameter is missing
-   *   </li>
-   *   <li> PERMISSION_DENIED "Note" - private note, user doesn't own
-   *   </li>
+   *   <li> BAD_DATA_FORMAT "Note.guid" - if the parameter is missing</li>
+   *   <li> PERMISSION_DENIED "Note" - private note, user doesn't own</li>
    * </ul>
    *
    * @throws EDAMNotFoundException <ul>
-   *   <li> "Note.guid" - not found, by GUID
-   *   </li>
+   *   <li>"Note.guid" - not found, by GUID</li>
    * </ul>
    */
   void stopSharingNote(1: string authenticationToken,
@@ -3171,11 +3971,11 @@ service NoteStore {
 
   /**
    * Identify related entities on the service, such as notes,
-   * notebooks, and tags related to notes or content.
+   * notebooks, tags and users in a business related to notes or content.
    *
    * @param query
    *   The information about which we are finding related entities.
-
+   *
    * @param resultSpec
    *   Allows the client to indicate the type and quantity of
    *   information to be returned, allowing a saving of time and
@@ -3203,6 +4003,10 @@ service NoteStore {
    *   <li>PERMISSION_DENIED "Note" - If the caller does not have access to
    *     the note identified by RelatedQuery.noteGuid.
    *   </li>
+   *   <li>PERMISSION_DENIED "authenticationToken" - If the caller has requested to
+   *     findExperts in the context of a non business user (i.e. The authenticationToken
+   *     is not a business auth token).
+   *   </li>
    *   <li>DATA_REQUIRED "RelatedResultSpec" - If you did not not set any values
    *     in the result spec.
    *   </li>
@@ -3219,5 +4023,74 @@ service NoteStore {
                             3: RelatedResultSpec resultSpec)
     throws (1: Errors.EDAMUserException userException,
             2: Errors.EDAMSystemException systemException,
-            3: Errors.EDAMNotFoundException notFoundException)
+            3: Errors.EDAMNotFoundException notFoundException),
+
+  /**
+   * Perform the same operation as updateNote() would provided that the update
+   * sequence number on the parameter Note object matches the current update sequence
+   * number that the service has for the note.  If they do <i>not</i> match, then
+   * <i>no</i> update is performed and the return value will have the current server
+   * state in the note field and updated will be false.  If the update sequence
+   * numbers between the client and server do match, then the note will be updated
+   * and the note field of the return value will be returned as it would be for the
+   * updateNote method.  This method allows you to check for an update to the note
+   * on the service, by another client instance, from when you obtained the
+   * note state as a baseline for your edits and the time when you wish to save your
+   * edits.  If your client can merge the conflict, you can avoid overwriting changes
+   * that were saved to the service by the other client.
+   *
+   * See the updateNote method for information on the exceptions and parameters for
+   * this method.  The only difference is that you must have an update sequence number
+   * defined on the note parameter (equal to the USN of the note as synched to the
+   * client), and the following additional exceptions might be thrown.
+   *
+   * @throws EDAMUserException <ul>
+   *   <li>DATA_REQUIRED "Note.updateSequenceNum" - If the update sequence number was
+   *       not provided.  This includes a value that is set as 0.</li>
+   *   <li>BAD_DATA_FORMAT "Note.updateSequenceNum" - If the note has an update
+   *       sequence number that is larger than the current server value, which should
+   *       not happen if your client is working correctly.</li>
+   * </ul>
+   */
+  UpdateNoteIfUsnMatchesResult updateNoteIfUsnMatches(1: string authenticationToken,
+                                                      2: Types.Note note)
+     throws (1: Errors.EDAMUserException userException,
+             2: Errors.EDAMNotFoundException notFoundException,
+             3: Errors.EDAMSystemException systemException),
+
+  /**
+   * Manage invitations and memberships associated with a given notebook.
+   *
+   * <i>Note:</i> Beta method! This method is currently intended for
+   * limited use by Evernote clients that have discussed using this
+   * routine with the platform team.
+   *
+   * @param parameters A structure containing all parameters for the updates.
+   *    See the structure documentation for details.
+   *
+   * @throws EDAMUserException <ul>
+   *   <li>EDAMErrorCode.LIMIT_REACHED "SharedNotebook" - Trying to share a
+   *    notebook while the notebook already has EDAM_NOTEBOOK_SHARED_NOTEBOOK_MAX
+   *    shares.</li>
+   * </ul>
+   */
+  ManageNotebookSharesResult manageNotebookShares(1: string authenticationToken,
+                                                  2: ManageNotebookSharesParameters parameters)
+     throws (1: Errors.EDAMUserException userException,
+             2: Errors.EDAMNotFoundException notFoundException,
+             3: Errors.EDAMSystemException systemException),
+
+  /**
+   * Return the share relationships for the given notebook, including
+   * both the invitations and the memberships.
+   *
+   * <i>Note:</i> Beta method! This method is currently intended for
+   * limited use by Evernote clients that have discussed using this
+   * routine with the platform team.
+   */
+  ShareRelationships getNotebookShares(1: string authenticationToken,
+                                       2: string notebookGuid)
+     throws (1: Errors.EDAMUserException userException,
+             2: Errors.EDAMNotFoundException notFoundException,
+             3: Errors.EDAMSystemException systemException)
 }
