@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2013 Evernote Corporation.
+ * Copyright 2007-2016 Evernote Corporation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -100,21 +100,21 @@ const string EDAM_EMAIL_LOCAL_REGEX =
  * the '@' symbol.
  */
 const string EDAM_EMAIL_DOMAIN_REGEX =
-  "^[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.([A-Za-z]{2,})$";
+  "^[A-Za-z0-9-]*[A-Za-z0-9](\\.[A-Za-z0-9-]*[A-Za-z0-9])*\\.([A-Za-z]{2,})$";
 /**
  * A regular expression that must match any email address given to Evernote.
  * Email addresses must comply with RFC 2821 and 2822.
  */
 const string EDAM_EMAIL_REGEX =
-  "^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(\\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.([A-Za-z]{2,})$";
+  "^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(\\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[A-Za-z0-9-]*[A-Za-z0-9](\\.[A-Za-z0-9-]*[A-Za-z0-9])*\\.([A-Za-z]{2,})$";
 
 /**
  * A regular expression that must match any VAT ID given to Evernote.
  * ref http://en.wikipedia.org/wiki/VAT_identification_number
- * ref http://my.safaribooksonline.com/book/programming/regular-expressions/9780596802837/4dot-validation-and-formatting/id2995136 
+ * ref http://my.safaribooksonline.com/book/programming/regular-expressions/9780596802837/4dot-validation-and-formatting/id2995136
  */
 const string EDAM_VAT_REGEX =
-  "^((AT)?U[0-9]{8}|(BE)?0?[0-9]{9}|(BG)?[0-9]{9,10}|(CY)?[0-9]{8}L|(CZ)?[0-9]{8,10}|(DE)?[0-9]{9}|(DK)?[0-9]{8}|(EE)?[0-9]{9}|(EL|GR)?[0-9]{9}|(ES)?[0-9A-Z][0-9]{7}[0-9A-Z]|(FI)?[0-9]{8}|(FR)?[0-9A-Z]{2}[0-9]{9}|(GB)?([0-9]{9}([0-9]{3})?|[A-Z]{2}[0-9]{3})|(HU)?[0-9]{8}|(IE)?[0-9]S[0-9]{5}L|(IT)?[0-9]{11}|(LT)?([0-9]{9}|[0-9]{12})|(LU)?[0-9]{8}|(LV)?[0-9]{11}|(MT)?[0-9]{8}|(NL)?[0-9]{9}B[0-9]{2}|(PL)?[0-9]{10}|(PT)?[0-9]{9}|(RO)?[0-9]{2,10}|(SE)?[0-9]{12}|(SI)?[0-9]{8}|(SK)?[0-9]{10})|[0-9]{9}MVA|[0-9]{6}|CHE[0-9]{9}(TVA|MWST|IVA)$";
+  "^(AT)?U[0-9]{8}$|^(BE)?0?[0-9]{9}$|^(BG)?[0-9]{9,10}$|^(CY)?[0-9]{8}L$|^(CZ)?[0-9]{8,10}$|^(DE)?[0-9]{9}$|^(DK)?[0-9]{8}$|^(EE)?[0-9]{9}$|^(EL|GR)?[0-9]{9}$|^(ES)?[0-9A-Z][0-9]{7}[0-9A-Z]$|^(FI)?[0-9]{8}$|^(FR)?[0-9A-Z]{2}[0-9]{9}$|^(GB)?([0-9]{9}([0-9]{3})?|[A-Z]{2}[0-9]{3})$|^(HU)?[0-9]{8}$|^(IE)?[0-9]S[0-9]{5}L$|^(IT)?[0-9]{11}$|^(LT)?([0-9]{9}|[0-9]{12})$|^(LU)?[0-9]{8}$|^(LV)?[0-9]{11}$|^(MT)?[0-9]{8}$|^(NL)?[0-9]{9}B[0-9]{2}$|^(PL)?[0-9]{10}$|^(PT)?[0-9]{9}$|^(RO)?[0-9]{2,10}$|^(SE)?[0-9]{12}$|^(SI)?[0-9]{8}$|^(SK)?[0-9]{10}$|^[0-9]{9}MVA$|^[0-9]{6}$|^CHE[0-9]{9}(TVA|MWST|IVA)$";
 
 /**
  * The minimum length of a timezone specification string
@@ -155,6 +155,8 @@ const string EDAM_MIME_TYPE_GIF = "image/gif";
 const string EDAM_MIME_TYPE_JPEG = "image/jpeg";
 /** Canonical MIME type string for PNG image resources */
 const string EDAM_MIME_TYPE_PNG = "image/png";
+/** Canonical MIME type string for TIFF image resources */
+const string EDAM_MIME_TYPE_TIFF = "image/tiff";
 /** Canonical MIME type string for WAV audio resources */
 const string EDAM_MIME_TYPE_WAV = "audio/wav";
 /** Canonical MIME type string for MP3 audio resources */
@@ -194,8 +196,8 @@ const set<string> EDAM_MIME_TYPES = [
 
 /**
  * The set of MIME types that Evernote will parse and index for
- * searching. With exception of images, and PDFs, which are
- * handled in a different way.
+ * searching. With exception of images, PDFs and plain text files,
+ * which are handled in a different way.
  */
 const set<string> EDAM_INDEXABLE_RESOURCE_MIME_TYPES = [
   "application/msword",
@@ -213,6 +215,18 @@ const set<string> EDAM_INDEXABLE_RESOURCE_MIME_TYPES = [
   "application/x-iwork-pages-sffpages",
   "application/x-iwork-numbers-sffnumbers",
   "application/x-iwork-keynote-sffkey"
+];
+
+/**
+ * The set of plain text MIME types that Evernote will parse and index
+ * for searching. The MIME types which start with "text/" will be handled
+ * separately by each client (i.e. hard-coded in each client).
+ */
+const set<string> EDAM_INDEXABLE_PLAINTEXT_MIME_TYPES = [
+  "application/x-sh",
+  "application/x-bsh",
+  "application/sql",
+  "application/x-sql"
 ];
 
 /**
@@ -354,7 +368,7 @@ const string EDAM_APPLICATIONDATA_NAME_REGEX = "^[A-Za-z0-9_.-]{3,32}$";
  * it is still necessary to check the sum of the lengths
  * against EDAM_APPLICATIONDATA_ENTRY_LEN_MAX.
  */
-const string EDAM_APPLICATIONDATA_VALUE_REGEX = "^[^\\p{Cc}]{0,4092}$";
+const string EDAM_APPLICATIONDATA_VALUE_REGEX = "^[\\p{Space}[^\\p{Cc}]]{0,4092}$";
 
 /**
  * The minimum length of a Notebook.name, in Unicode characters
@@ -403,7 +417,7 @@ const string EDAM_PUBLISHING_URI_REGEX = "^[a-zA-Z0-9.~_+-]{1,255}$";
 /**
  * The set of strings that may not be used as a publishing URI
  */
-const set<string> EDAM_PUBLISHING_URI_PROHIBITED = [ ".." ];
+const set<string> EDAM_PUBLISHING_URI_PROHIBITED = [ ".", ".." ];
 
 /**
  * The minimum length of a Publishing.publicDescription field.
@@ -502,7 +516,7 @@ const i32    EDAM_USER_NOTEBOOKS_MAX = 250;
 /**
  * Maximum number of Notebooks in a business account
  */
-const i32    EDAM_BUSINESS_NOTEBOOKS_MAX = 5000;
+const i32    EDAM_BUSINESS_NOTEBOOKS_MAX = 10000;
 
 /**
  * Maximum number of recent email addresses that are maintained
@@ -534,14 +548,34 @@ const i64    EDAM_USER_UPLOAD_LIMIT_FREE = 62914560;
  * The number of bytes of new data that may be uploaded to a Premium user's
  * account each month.
  */
-const i64    EDAM_USER_UPLOAD_LIMIT_PREMIUM = 1073741824;
+const i64    EDAM_USER_UPLOAD_LIMIT_PREMIUM = 10737418240;
+
+/**
+ * The number of bytes of new data that may be uploaded each month to an account at
+ * a Plus service level.
+ */
+const i64    EDAM_USER_UPLOAD_LIMIT_PLUS = 1073741824;
+
+/**
+ * The number of bytes of new data uploaded in a monthly quota cycle at which point
+ * users should be prompted with a survey to gather information on how they are using
+ * Evernote.
+ */
+const i64 EDAM_USER_UPLOAD_SURVEY_THRESHOLD = 5368709120;
 
 /**
  * The number of bytes of new data that may be uploaded to a Business user's
  * personal account each month. Note that content uploaded into the Business
  * notebooks by the user does not count against this limit.
  */
-const i64    EDAM_USER_UPLOAD_LIMIT_BUSINESS = 2147483647;
+const i64    EDAM_USER_UPLOAD_LIMIT_BUSINESS = 10737418240;
+
+/**
+ * The number of bytes of new data that may be uploaded to a Business for each
+ * member of the business per month. The total bytes available can be determined
+ * by multiplying this with the number of business users.
+ */
+const i64    EDAM_USER_UPLOAD_LIMIT_BUSINESS_PER_USER = 2147483647;
 
 /**
  * Maximum total size of a Note that can be added to a Free account.
@@ -557,7 +591,7 @@ const i32    EDAM_NOTE_SIZE_MAX_FREE = 26214400;
  * ENML content length (in Unicode characters) plus the sum of all resource
  * sizes (in bytes).
  */
-const i32    EDAM_NOTE_SIZE_MAX_PREMIUM = 104857600;
+const i32    EDAM_NOTE_SIZE_MAX_PREMIUM = 209715200;
 
 /**
  * Maximum size of a resource, in bytes, for Free accounts
@@ -567,7 +601,7 @@ const i32    EDAM_RESOURCE_SIZE_MAX_FREE = 26214400;
 /**
  * Maximum size of a resource, in bytes, for Premium accounts
  */
-const i32    EDAM_RESOURCE_SIZE_MAX_PREMIUM = 104857600;
+const i32    EDAM_RESOURCE_SIZE_MAX_PREMIUM = 209715200;
 
 /**
  * Maximum number of linked notebooks per account, for a free
@@ -580,29 +614,39 @@ const i32   EDAM_USER_LINKED_NOTEBOOK_MAX = 100;
  * account.  Users who are part of an active business are also
  * covered under "premium".
  */
-const i32   EDAM_USER_LINKED_NOTEBOOK_MAX_PREMIUM = 250;
+const i32   EDAM_USER_LINKED_NOTEBOOK_MAX_PREMIUM = 500;
 
 /**
- * Maximum number of shared notebooks per notebook
+ * Maximum number of shared notebooks per business notebook
  */
-const i32   EDAM_NOTEBOOK_SHARED_NOTEBOOK_MAX = 250;
+const i32   EDAM_NOTEBOOK_BUSINESS_SHARED_NOTEBOOK_MAX = 5000;
+/**
+ * Maximum number of shared notebooks per personal notebook
+ */
+const i32   EDAM_NOTEBOOK_PERSONAL_SHARED_NOTEBOOK_MAX = 500;
+
+/**
+ * Maximum number of SharedNote records per business note
+ */
+const i32   EDAM_NOTE_BUSINESS_SHARED_NOTE_MAX = 1000;
+/**
+ * Maximum number of SharedNote records per personal note
+ */
+const i32   EDAM_NOTE_PERSONAL_SHARED_NOTE_MAX = 100;
 
 /**
  * The minimum length of the content class attribute of a note.
  */
 const i32   EDAM_NOTE_CONTENT_CLASS_LEN_MIN = 3;
-
 /**
  * The maximum length of the content class attribute of a note.
  */
 const i32   EDAM_NOTE_CONTENT_CLASS_LEN_MAX = 32;
-
 /**
  * The regular expression that the content class of a note must match
  * to be valid.
  */
 const string EDAM_NOTE_CONTENT_CLASS_REGEX = "^[A-Za-z0-9_.-]{3,32}$";
-
 /**
  * The content class prefix used for all notes created by Evernote Hello.
  * This prefix can be used to assemble individual content class strings,
@@ -611,7 +655,6 @@ const string EDAM_NOTE_CONTENT_CLASS_REGEX = "^[A-Za-z0-9_.-]{3,32}$";
  * search strings, the * character must be appended to this constant.
  */
 const string EDAM_HELLO_APP_CONTENT_CLASS_PREFIX = "evernote.hello.";
-
 /**
  * The content class prefix used for all notes created by Evernote Food.
  * This prefix can be used to assemble individual content class strings,
@@ -620,7 +663,6 @@ const string EDAM_HELLO_APP_CONTENT_CLASS_PREFIX = "evernote.hello.";
  * search strings, the * character must be appended to this constant.
  */
 const string EDAM_FOOD_APP_CONTENT_CLASS_PREFIX = "evernote.food.";
-
 /**
  * The content class prefix used for structured notes created by Evernote
  * Hello that represents an encounter with a person. When performing a
@@ -628,7 +670,6 @@ const string EDAM_FOOD_APP_CONTENT_CLASS_PREFIX = "evernote.food.";
  * character must be appended to this constant.
  */
 const string EDAM_CONTENT_CLASS_HELLO_ENCOUNTER = "evernote.hello.encounter";
-
 /**
  * The content class prefix used for structured notes created by Evernote
  * Hello that represents the user's profile. When performing a
@@ -636,7 +677,6 @@ const string EDAM_CONTENT_CLASS_HELLO_ENCOUNTER = "evernote.hello.encounter";
  * character must be appended to this constant.
  */
 const string EDAM_CONTENT_CLASS_HELLO_PROFILE = "evernote.hello.profile";
-
 /**
  * The content class prefix used for structured notes created by
  * Evernote Food that captures the experience of a particular meal.
@@ -678,6 +718,62 @@ const string EDAM_CONTENT_CLASS_PENULTIMATE_PREFIX = "evernote.penultimate.";
 const string EDAM_CONTENT_CLASS_PENULTIMATE_NOTEBOOK = "evernote.penultimate.notebook";
 
 /**
+ * The NoteAttributes.sourceApplication value used for notes captured by the Post-it
+ * camera.
+ */
+const string EDAM_SOURCE_APPLICATION_POSTIT = "postit";
+
+/**
+ * The NoteAttributes.sourceApplication value used for notes captured by the Moleskine
+ * page camera.
+ */
+const string EDAM_SOURCE_APPLICATION_MOLESKINE = "moleskine";
+
+/**
+ * The NoteAttributes.sourceApplication value used for notes captured by
+ * PFU ScanSnap Evernote Edition.
+ */
+const string EDAM_SOURCE_APPLICATION_EN_SCANSNAP = "scanner.scansnap.evernote";
+
+/**
+ * The NoteAttributes.sourceApplication value used for notes captured with the Embedded
+ * Web Clipper.
+ */
+const string EDAM_SOURCE_APPLICATION_EWC = "clipncite.web";
+
+/**
+ * The NoteAttributes.source value used for notes captured by the Microsoft Outlook clipper.
+ */
+const string EDAM_SOURCE_OUTLOOK_CLIPPER = "app.ms.outlook";
+
+/**
+ * A NoteAttributes.noteTitleQuality value indicating that a note has no meaningful title,
+ * only a placeholder value such as "Untitled Note".
+ */
+const i32 EDAM_NOTE_TITLE_QUALITY_UNTITLED = 0;
+
+/**
+ * A NoteAttributes.noteTitleQuality value indicating that the quality of an automatically
+ * generated note title is low. Examples of low quality titles include those based on a
+ * note's type and location, such as "Snapshot from 123 Sesame Street in New York".
+ */
+const i32 EDAM_NOTE_TITLE_QUALITY_LOW = 1;
+
+/**
+ * A NoteAttributes.noteTitleQuality value indicating that the quality of an automatically
+ * generated note title is medium. Examples of medium quality titles include those based on a
+ * calendar entry, such as "Note from Weekly Staff Meeting".
+ */
+const i32 EDAM_NOTE_TITLE_QUALITY_MEDIUM = 2;
+
+/**
+ * A NoteAttributes.noteTitleQuality value indicating that the quality of an automatically
+ * generated note title is high. Examples of high quality titles include those based on a
+ * scanned business card, such as "John Doe - Scanned Business Card".
+ */
+const i32 EDAM_NOTE_TITLE_QUALITY_HIGH = 3;
+
+/**
  * The minimum length of the plain text in a findRelated query, assuming that
  * plaintext is being provided.
  */
@@ -705,6 +801,17 @@ const i32 EDAM_RELATED_MAX_NOTEBOOKS = 1;
  * The maximum number of tags that will be returned from a findRelated() query.
  */
 const i32 EDAM_RELATED_MAX_TAGS = 25;
+
+/**
+ * The maximum number of experts that will be returned from a findRelated() query
+ */
+const i32 EDAM_RELATED_MAX_EXPERTS = 10;
+
+/**
+ * The maximum number of related content snippets that will be returned from a
+ * findRelated() query.
+ */
+const i32 EDAM_RELATED_MAX_RELATED_CONTENT = 10;
 
 /**
  * The minimum length, in Unicode characters, of a description for a business
@@ -751,21 +858,62 @@ const i32 EDAM_PREFERENCE_VALUE_LEN_MAX = 1024;
  */
 const i32 EDAM_MAX_PREFERENCES = 100;
 /**
- * Maximum number of values per preference name
+ * Maximum number of values per preference name when using
+ * values of size no greater than EDAM_PREFERENCE_VALUE_LEN_MAX.
  */
 const i32 EDAM_MAX_VALUES_PER_PREFERENCE = 256;
+/**
+ * The maximum length of a preference value if you only use one value
+ * per preference rather than up to EDAM_MAX_VALUES_PER_PREFERENCE.
+ * This option is useful if you want a single string that is larger
+ * than EDAM_PREFERENCE_VALUE_LEN_MAX and would otherwise need to
+ * split the string into multiple pieces to store it.
+ */
+const i32 EDAM_PREFERENCE_ONLY_ONE_VALUE_LEN_MAX = 16384;
 /**
  * A preference name must match this regex.
  */
 const string EDAM_PREFERENCE_NAME_REGEX = "^[A-Za-z0-9_.-]{3,32}$";
 /**
- * A preference value must match this regex.
+ * A preference value must match this regex if you are using more
+ * than a single value for a preference.
  */
 const string EDAM_PREFERENCE_VALUE_REGEX = "^[^\\p{Cc}]{1,1024}$";
+/**
+ * A preference value must match this regex if you are using a single
+ * value for a preference.
+ */
+const string EDAM_PREFERENCE_ONLY_ONE_VALUE_REGEX = "^[^\\p{Cc}]{1,16384}$";
 /**
  * The name of the preferences entry that contains shortcuts.
  */
 const string EDAM_PREFERENCE_SHORTCUTS = "evernote.shortcuts";
+/**
+ * The name of the preferences entry that contains the notebook GUID (not the linked notebook) of
+ * the default business notebook. It must be in the format EDAM_GUID_REGEX.
+ * If a default business notebook is not set and the user is a business user
+ * the user should be prompted to set the default business notebook.
+ * The default business notebook must be a read/write notebook.
+ * Whenever the default business notebook guid is used, it must be revalidiated as a writable
+ * notebook. If it is not valid, the user should be re-prompted to set the value.
+ * This value is used by clients only.
+ */
+const string EDAM_PREFERENCE_BUSINESS_DEFAULT_NOTEBOOK = "evernote.business.notebook";
+/**
+ * The name of the preferences entry that contains a boolean indicating that default
+ * quicknotes should go into a business notebook. The EDAM_PREFERENCE_BUSINESS_DEFAULT_NOTEBOOK
+ * must be set correctly for this preference to be honored.
+ * The quicknote preferences should only be set to "true", if quicknote should use a business
+ * notebook.
+ * Any value other than "true" (or the omission of a value) should be treated as "false".
+ * In this case, quicknotes should be created in in the user's personal default notebook.
+ * The interface should not allow users to set quicknote to a business notebook
+ * without a valid default business notebook selected, however, clients should handle the edge
+ * case of an invalid business notebook guid.  If a user stops being a business user or
+ * does not have write access to any business notebooks the quicknote preference should be
+ * ignored.
+ */
+const string EDAM_PREFERENCE_BUSINESS_QUICKNOTE = "evernote.business.quicknote";
 /**
  * The maximum number of shortcuts that a user may have.
  */
@@ -801,3 +949,89 @@ const i32 EDAM_SEARCH_SUGGESTIONS_PREFIX_LEN_MAX = 1024;
  * Minimum length of the search suggestion prefix
  */
 const i32 EDAM_SEARCH_SUGGESTIONS_PREFIX_LEN_MIN = 2;
+
+/**
+ * Default maximum number of results the service will return for findContact
+ */
+const i32 EDAM_FIND_CONTACT_DEFAULT_MAX_RESULTS = 100;
+
+/**
+ * Absolute maximum number of results the service will return for findContact
+ */
+const i32 EDAM_FIND_CONTACT_MAX_RESULTS = 256;
+
+/**
+ * The maximum number of separate notes that may be queried in a single call to
+ * NoteStore.getViewersForNotes.
+ */
+const i32 EDAM_NOTE_LOCK_VIEWERS_NOTES_MAX = 150;
+
+/**
+ * The maximum length of a message body in unicode characters.
+ */
+const i32 EDAM_MESSAGE_BODY_LEN_MAX = 2048;
+
+/**
+ * The regex to validate message.body against
+ */
+const string EDAM_MESSAGE_BODY_REGEX = "^[^\\p{Cc}\\p{Z}]([^\\p{Cc}\\p{Zl}\\p{Zp}]{0,2046}[^\\p{Cc}\\p{Z}])?$";
+
+/**
+ * The maximum number of recipients on a MessageThread.
+ */
+const i32 EDAM_MESSAGE_RECIPIENTS_MAX = 50;
+
+/**
+ * The maximum number of attachments a Message can have.
+ */
+const i32 EDAM_MESSAGE_ATTACHMENTS_MAX = 100;
+
+/**
+ * The maximum length of a message attachment title in unicode characters.
+ */
+const i32 EDAM_MESSAGE_ATTACHMENT_TITLE_LEN_MAX = 255;
+
+/**
+ * The regex to validate message attachment titles against
+ */
+const string EDAM_MESSAGE_ATTACHMENT_TITLE_REGEX = "^[^\\p{Cc}\\p{Z}]([^\\p{Cc}\\p{Zl}\\p{Zp}]{0,253}[^\\p{Cc}\\p{Z}])?$";
+
+/**
+ * The maximum length of a message attachment snippet in unicode characters.
+ */
+const i32 EDAM_MESSAGE_ATTACHMENT_SNIPPET_LEN_MAX = 2048;
+
+/**
+ * The regex to validate message attachment snippets against
+ */
+const string EDAM_MESSAGE_ATTACHMENT_SNIPPET_REGEX = "^[^\\p{Cc}\\p{Z}]([\\n[^\\p{Cc}\\p{Zl}\\p{Zp}]]{0,2046}[^\\p{Cc}\\p{Z}])?$";
+
+/**
+ * Maximum user profile photo size, in bytes, that clients may send to the service.
+ * Photos may be resized before being stored on the service.
+ */
+const i32 EDAM_USER_PROFILE_PHOTO_MAX_BYTES = 716800;
+
+/**
+ * The maximum length of a promotion ID in unicode characters.
+ */
+const i32 EDAM_PROMOTION_ID_LEN_MAX = 32;
+
+/**
+ * The regex to validate promotion IDs against.
+ */
+const string EDAM_PROMOTION_ID_REGEX = "^[A-Za-z0-9_.-]{1,32}$";
+
+/** App Feedback Rating range */
+const i16 EDAM_APP_RATING_MIN = 1;
+const i16 EDAM_APP_RATING_MAX = 5;
+
+/**
+ * The maximium number of note snippets you can retrieve in a single request
+ */
+const i32 EDAM_SNIPPETS_NOTES_MAX = 24;
+
+/**
+ * The maximum number of connected identities a client can request.
+ */
+const i32 EDAM_CONNECTED_IDENTITY_REQUEST_MAX = 100;
