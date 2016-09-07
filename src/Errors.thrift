@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2012 Evernote Corporation.
+ * Copyright 2007-2016 Evernote Corporation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,6 +27,8 @@
  * This file contains the definitions of the Evernote-related errors that
  * can occur when making calls to EDAM services. 
  */
+
+include "Types.thrift"
 
 namespace as3 com.evernote.edam.error
 namespace java com.evernote.edam.error
@@ -85,6 +87,12 @@ namespace perl EDAMErrors
  *   <dt>RATE_LIMIT_REACHED</dt>
  *     <dd>Operation denied because the calling application has reached
  *         its hourly API call limit for this user.</dd>
+ *   <dt>BUSINESS_SECURITY_LOGIN_REQUIRED</dt>
+ *     <dd>Access to a business account has been denied because the user must complete
+ *        additional steps in order to comply with business security requirements.</dd>
+ *   <dt>DEVICE_LIMIT_REACHED</dt>
+ *     <dd>Operation denied because the user has exceeded their maximum allowed
+ *        number of devices.</dd>
  * </dl>
  */
 enum EDAMErrorCode {
@@ -106,8 +114,51 @@ enum EDAMErrorCode {
   TOO_MANY = 16,
   UNSUPPORTED_OPERATION = 17,
   TAKEN_DOWN = 18,
-  RATE_LIMIT_REACHED = 19
+  RATE_LIMIT_REACHED = 19,
+  BUSINESS_SECURITY_LOGIN_REQUIRED = 20,
+  DEVICE_LIMIT_REACHED = 21,
 }
+
+
+/**
+ * An enumeration that provides a reason for why a given contact was invalid, for example,
+ * as thrown via an EDAMInvalidContactsException.
+ *
+ * <dl>
+ *   <dt>BAD_ADDRESS</dt>
+ *     <dd>The contact information does not represent a valid address for a recipient.
+ *         Clients should be validating and normalizing contacts, so receiving this
+ *         error code commonly represents a client error.
+ *         </dd>
+ *   <dt>DUPLICATE_CONTACT</dt>
+ *     <dd>If the method throwing this exception accepts a list of contacts, this error
+ *         code indicates that the given contact is a duplicate of another contact in
+ *         the list.  Note that the server may clean up contacts, and that this cleanup
+ *         occurs before checking for duplication.  Receiving this error is commonly
+ *         an indication of a client issue, since client should be normalizing contacts
+ *         and removing duplicates. All instances that are duplicates are returned.  For
+ *         example, if a list of 5 contacts has the same e-mail address twice, the two
+ *         conflicting e-mail address contacts will be returned.
+ *         </dd>
+ *   <dt>NO_CONNECTION</dt>
+ *     <dd>Indicates that the given contact, an Evernote type contact, is not connected
+ *         to the user for which the call is being made. It is possible that clients are
+ *         out of sync with the server and should re-synchronize their identities and
+ *         business user state. See Identity.userConnected for more information on user
+ *         connections.
+ *         </dd>
+ * </dl>
+ *
+ * Note that if multiple reasons may apply, only one is returned. The precedence order
+ * is BAD_ADDRESS, DUPLICATE_CONTACT, NO_CONNECTION, meaning that if a contact has a bad
+ * address and is also duplicated, it will be returned as a BAD_ADDRESS.
+ */
+enum EDAMInvalidContactReason {
+  BAD_ADDRESS,
+  DUPLICATE_CONTACT,
+  NO_CONNECTION
+}
+
 
 /**
  * This exception is thrown by EDAM procedures when a call fails as a result of 
@@ -169,4 +220,32 @@ exception EDAMSystemException {
 exception EDAMNotFoundException {
   1:  optional  string identifier,
   2:  optional  string key
+}
+
+/**
+ * An exception thrown when the provided Contacts fail validation. For instance,
+ * email domains could be invalid, phone numbers might not be valid for SMS,
+ * etc.
+ *
+ * We will not provide individual reasons for each Contact's validation failure.
+ * The presence of the Contact in this exception means that the user must figure
+ * out how to take appropriate action to fix this Contact.
+ *
+ * <dl>
+ *   <dt>contacts</dt>
+ *   <dd>The list of Contacts that are considered invalid by the service</dd>
+ *
+ *   <dt>parameter</dt>
+ *   <dd>If the error applied to a particular input parameter, this will
+ *   indicate which parameter.</dd>
+ *
+ *   <dt>reasons</dt>
+ *   <dd>If supplied, the list of reasons why the server considered a contact invalid,
+ *   matching, in order, the list returned in the contacts field.</dd>
+ * </dl>
+ */
+exception EDAMInvalidContactsException {
+  1:  required  list<Types.Contact> contacts,
+  2:  optional  string parameter,
+  3:  optional  list<EDAMInvalidContactReason> reasons
 }
