@@ -1481,8 +1481,8 @@ struct Resource {
  *  is treated as "read-only" for clients; the server will ignore changes
  *  to this field from an external client.
  *  </dd>
- *
- * <dt>reminderOrder</dt>
+ */
+/** <dt>reminderOrder</dt>
  * <dd>The set of notes with this parameter set are considered
  * "reminders" and are to be treated specially by clients to give them
  * higher UI prominence within a notebook.  The value is used to sort
