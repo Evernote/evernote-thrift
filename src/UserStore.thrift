@@ -40,6 +40,7 @@ namespace rb Evernote.EDAM.UserStore
 namespace php EDAM.UserStore
 namespace cocoa EDAM
 namespace perl EDAMUserStore
+namespace go edam
 
 
 /**

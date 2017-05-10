@@ -41,6 +41,7 @@ namespace rb Evernote.EDAM.Type
 namespace php EDAM.Types
 namespace cocoa EDAM
 namespace perl EDAMTypes
+namespace go edam
 
 
 // =============================== typedefs ====================================
