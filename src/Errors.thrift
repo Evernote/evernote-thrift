@@ -38,6 +38,7 @@ namespace cpp evernote.edam
 namespace rb Evernote.EDAM.Error
 namespace php EDAM.Error
 namespace perl EDAMErrors
+namespace go edam
 
 /**
  * Numeric codes indicating the type of error that occurred on the

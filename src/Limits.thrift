@@ -37,6 +37,7 @@ namespace rb Evernote.EDAM.Limits
 namespace php EDAM.Limits
 namespace cocoa EDAM
 namespace perl EDAMLimits
+namespace go edam
 
 
 // ========================== string field limits ==============================

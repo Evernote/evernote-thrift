@@ -42,6 +42,7 @@ namespace rb Evernote.EDAM.NoteStore
 namespace php EDAM.NoteStore
 namespace cocoa EDAM
 namespace perl EDAMNoteStore
+namespace go edam
 
 /**
  * This structure encapsulates the information about the state of the
