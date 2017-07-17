@@ -579,18 +579,14 @@ const i64    EDAM_USER_UPLOAD_LIMIT_BUSINESS = 10737418240;
 const i64    EDAM_USER_UPLOAD_LIMIT_BUSINESS_PER_USER = 2147483647;
 
 /**
- * Maximum total size of a Note that can be added to a Free account.
- * The size of a note is calculated as:
- * ENML content length (in Unicode characters) plus the sum of all resource
- * sizes (in bytes).
+ * DEPRECATED - clients should rely on AccountLimits.noteSizeMax for a user's
+ * particular service level.
  */
 const i32    EDAM_NOTE_SIZE_MAX_FREE = 26214400;
 
 /**
- * Maximum total size of a Note that can be added to a Premium account.
- * The size of a note is calculated as:
- * ENML content length (in Unicode characters) plus the sum of all resource
- * sizes (in bytes).
+ * DEPRECATED - clients should rely on AccountLimits.noteSizeMax for a user's
+ * particular service level.
  */
 const i32    EDAM_NOTE_SIZE_MAX_PREMIUM = 209715200;
 
