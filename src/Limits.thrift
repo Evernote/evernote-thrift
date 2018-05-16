@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2016 Evernote Corporation. All rights reserved.
+ * Copyright 2007-2018 Evernote Corporation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -115,7 +115,7 @@ const string EDAM_EMAIL_REGEX =
  * ref http://my.safaribooksonline.com/book/programming/regular-expressions/9780596802837/4dot-validation-and-formatting/id2995136
  */
 const string EDAM_VAT_REGEX =
-  "^(AT)?U[0-9]{8}$|^(BE)?0?[0-9]{9}$|^(BG)?[0-9]{9,10}$|^(CY)?[0-9]{8}L$|^(CZ)?[0-9]{8,10}$|^(DE)?[0-9]{9}$|^(DK)?[0-9]{8}$|^(EE)?[0-9]{9}$|^(EL|GR)?[0-9]{9}$|^(ES)?[0-9A-Z][0-9]{7}[0-9A-Z]$|^(FI)?[0-9]{8}$|^(FR)?[0-9A-Z]{2}[0-9]{9}$|^(GB)?([0-9]{9}([0-9]{3})?|[A-Z]{2}[0-9]{3})$|^(HU)?[0-9]{8}$|^(IE)?[0-9]S[0-9]{5}L$|^(IT)?[0-9]{11}$|^(LT)?([0-9]{9}|[0-9]{12})$|^(LU)?[0-9]{8}$|^(LV)?[0-9]{11}$|^(MT)?[0-9]{8}$|^(NL)?[0-9]{9}B[0-9]{2}$|^(PL)?[0-9]{10}$|^(PT)?[0-9]{9}$|^(RO)?[0-9]{2,10}$|^(SE)?[0-9]{12}$|^(SI)?[0-9]{8}$|^(SK)?[0-9]{10}$|^[0-9]{9}MVA$|^[0-9]{6}$|^CHE[0-9]{9}(TVA|MWST|IVA)$";
+  "^(AT)?U[0-9]{8}$|^(BE)?0?[0-9]{9}$|^(BG)?[0-9]{9,10}$|^(CY)?[0-9]{8}L$|^(CZ)?[0-9]{8,10}$|^(DE)?[0-9]{9}$|^(DK)?[0-9]{8}$|^(EE)?[0-9]{9}$|^(EL|GR)?[0-9]{9}$|^(ES)?[0-9A-Z][0-9]{7}[0-9A-Z]$|^(FI)?[0-9]{8}$|^(FR)?[0-9A-Z]{2}[0-9]{9}$|^(GB)?([0-9]{9}([0-9]{3})?|[A-Z]{2}[0-9]{3})$|^(HU)?[0-9]{8}$|^(IE)?[0-9]{7}[A-Z]{1,2}$|^(IT)?[0-9]{11}$|^(LT)?([0-9]{9}|[0-9]{12})$|^(LU)?[0-9]{8}$|^(LV)?[0-9]{11}$|^(MT)?[0-9]{8}$|^(NL)?[0-9]{9}B[0-9]{2}$|^(PL)?[0-9]{10}$|^(PT)?[0-9]{9}$|^(RO)?[0-9]{2,10}$|^(SE)?[0-9]{12}$|^(SI)?[0-9]{8}$|^(SK)?[0-9]{10}$|^[0-9]{9}MVA$|^[0-9]{6}$|^CHE[0-9]{9}(TVA|MWST|IVA)$";
 
 /**
  * The minimum length of a timezone specification string
@@ -158,6 +158,8 @@ const string EDAM_MIME_TYPE_JPEG = "image/jpeg";
 const string EDAM_MIME_TYPE_PNG = "image/png";
 /** Canonical MIME type string for TIFF image resources */
 const string EDAM_MIME_TYPE_TIFF = "image/tiff";
+/** Canonical MIME type string for BMP image resources */
+const string EDAM_MIME_TYPE_BMP = "image/bmp";
 /** Canonical MIME type string for WAV audio resources */
 const string EDAM_MIME_TYPE_WAV = "audio/wav";
 /** Canonical MIME type string for MP3 audio resources */
@@ -404,6 +406,29 @@ const string EDAM_NOTEBOOK_STACK_REGEX =
   "^[^\\p{Cc}\\p{Z}]([^\\p{Cc}\\p{Zl}\\p{Zp}]{0,98}[^\\p{Cc}\\p{Z}])?$";
 
 /**
+ * The minimum length of a Workspace.name, in Unicode characters
+ */
+const i32    EDAM_WORKSPACE_NAME_LEN_MIN = 1;
+
+/**
+ * The maximum length of a Workspace.name, in Unicode characters
+ */
+const i32    EDAM_WORKSPACE_NAME_LEN_MAX = 100;
+
+/**
+ * The maximum length of a Workspace.description, in Unicode characters
+ */
+const i32    EDAM_WORKSPACE_DESCRIPTION_LEN_MAX = 600;
+
+/**
+ * All Workspace.name fields must match this pattern.
+ * This excludes control chars or line/paragraph separators.
+ * The string may not begin or end with whitespace.
+ */
+const string EDAM_WORKSPACE_NAME_REGEX =
+  "^[^\\p{Cc}\\p{Z}]([^\\p{Cc}\\p{Zl}\\p{Zp}]{0,98}[^\\p{Cc}\\p{Z}])?$";
+
+/**
  * The minimum length of a public notebook URI component
  */
 const i32    EDAM_PUBLISHING_URI_LEN_MIN = 1;
@@ -472,6 +497,11 @@ const string EDAM_USER_PASSWORD_REGEX =
  */
 const i32    EDAM_BUSINESS_URI_LEN_MAX = 32;
 
+/**
+ * Valid Evernote Business marketing code / affiliate code format.
+ */
+const string EDAM_BUSINESS_MARKETING_CODE_REGEX_PATTERN = "[A-Za-z0-9-]{1,128}";
+
 // ==================== data model collection limits ===========================
 
 /**
@@ -515,9 +545,19 @@ const i32    EDAM_BUSINESS_NOTES_MAX = 500000;
 const i32    EDAM_USER_NOTEBOOKS_MAX = 250;
 
 /**
+ * Maximum number of Workspaces per user
+ */
+const i32    EDAM_USER_WORKSPACES_MAX = 0;
+
+/**
  * Maximum number of Notebooks in a business account
  */
 const i32    EDAM_BUSINESS_NOTEBOOKS_MAX = 10000;
+
+/**
+ * Maximum number of Workspaces in a business account
+ */
+const i32    EDAM_BUSINESS_WORKSPACES_MAX = 1000;
 
 /**
  * Maximum number of recent email addresses that are maintained
@@ -550,6 +590,18 @@ const i64    EDAM_USER_UPLOAD_LIMIT_FREE = 62914560;
  * account each month.
  */
 const i64    EDAM_USER_UPLOAD_LIMIT_PREMIUM = 10737418240;
+
+/**
+ * The number of bytes of new data that may be uploaded to new business
+ * account during the first month. 50GB.
+ */
+const i64    EDAM_USER_UPLOAD_LIMIT_BUSINESS_FIRST_MONTH = 53687091200;
+
+/**
+ * The number of bytes of new data that may be uploaded to a business
+ * account for the next month. 20GB.
+ */
+const i64    EDAM_USER_UPLOAD_LIMIT_BUSINESS_NEXT_MONTH = 21474836480;
 
 /**
  * The number of bytes of new data that may be uploaded each month to an account at
@@ -743,6 +795,24 @@ const string EDAM_SOURCE_APPLICATION_EN_SCANSNAP = "scanner.scansnap.evernote";
 const string EDAM_SOURCE_APPLICATION_EWC = "clipncite.web";
 
 /**
+ * The NoteAttributes.sourceApplication value used for notes captured with the Android
+ * share extension.
+ */
+const string EDAM_SOURCE_APPLICATION_ANDROID_SHARE_EXTENSION = "android.clipper.evernote";
+
+/**
+ * The NoteAttributes.sourceApplication value used for notes captured with the iOS share
+ * extension.
+ */
+const string EDAM_SOURCE_APPLICATION_IOS_SHARE_EXTENSION = "ios.clipper.evernote";
+
+/**
+ * The NoteAttributes.sourceApplication value used for notes captured with the Evernote
+ * Web Clipper.
+ */
+const string EDAM_SOURCE_APPLICATION_WEB_CLIPPER = "webclipper.evernote";
+
+/**
  * The NoteAttributes.source value used for notes captured by the Microsoft Outlook clipper.
  */
 const string EDAM_SOURCE_OUTLOOK_CLIPPER = "app.ms.outlook";
@@ -909,7 +979,7 @@ const string EDAM_PREFERENCE_BUSINESS_DEFAULT_NOTEBOOK = "evernote.business.note
  * Any value other than "true" (or the omission of a value) should be treated as "false".
  * In this case, quicknotes should be created in in the user's personal default notebook.
  * The interface should not allow users to set quicknote to a business notebook
- * without a valid default business notebook selected, however, clients should handle the edge
+ * without a valid default business notebook selected, however, clients should handle the edge 
  * case of an invalid business notebook guid.  If a user stops being a business user or
  * does not have write access to any business notebooks the quicknote preference should be
  * ignored.
@@ -966,6 +1036,11 @@ const i32 EDAM_FIND_CONTACT_MAX_RESULTS = 256;
  * NoteStore.getViewersForNotes.
  */
 const i32 EDAM_NOTE_LOCK_VIEWERS_NOTES_MAX = 150;
+
+/**
+ * Absolute maximum number of results the servce will return for PersistentInternalMarket.getOrders()
+ */
+const i32 EDAM_GET_ORDERS_MAX_RESULTS = 2000;
 
 /**
  * The maximum length of a message body in unicode characters.
@@ -1030,9 +1105,16 @@ const i16 EDAM_APP_RATING_MAX = 5;
 /**
  * The maximium number of note snippets you can retrieve in a single request
  */
-const i32 EDAM_SNIPPETS_NOTES_MAX = 24;
+const i32 EDAM_SNIPPETS_NOTES_MAX = 24; 
 
 /**
  * The maximum number of connected identities a client can request.
  */
 const i32 EDAM_CONNECTED_IDENTITY_REQUEST_MAX = 100;
+
+ /**
+   *  Maximum length for OpenID token. There is no official enforced limit. The length of the Token ID depends
+   *  on the provider. 1000 seems to be the safest value at this time.
+   */
+const i32 EDAM_OPEN_ID_ACCESS_TOKEN_MAX = 1000;
+

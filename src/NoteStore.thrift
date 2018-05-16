@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2016 Evernote Corporation. All rights reserved.
+ * Copyright 2007-2018 Evernote Corporation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -461,12 +461,33 @@ struct SyncChunkFilter {
  *   this option to take effect when calling search APIs.
  *   </dd>
  *
- * <dt>context</dt>
- * <dd>Specifies the context to consider when determining result ranking.
- *     Clients must leave this value unset unless they wish to explicitly specify a known
- *     non-default context.
- * </dd>
+ * <dt>includeAllReadableWorkspaces</dt>
+ *   <dd>
+ *   If true, then the search will include all workspaces that are readable
+ *   by the user. A business authentication token must be supplied for
+ *   this option to take effect when calling search APIs.
+ *   </dd>
  *
+ * <dt>context</dt>
+ *   <dd>
+ *   Specifies the context to consider when determining result ranking.
+ *   Clients must leave this value unset unless they wish to explicitly specify a known
+ *   non-default context.
+ *   </dd>
+ *
+ * <dt>rawWords</dt>
+ *   <dd>
+ *   If present, the raw user query input.
+ *   Accepts the full search grammar documented in the Evernote API Overview.
+ *   </dd>
+ *
+ * <dt>searchContextBytes</dt>
+ *   <dd>
+ *   Specifies the correlating information about the current search session, in byte array.
+ *   If this request is not for the first page of search results, the client should populate
+ *   this field with the value of searchContextBytes from the NotesMetadataList of the
+ *   original search response.
+ *   </dd>
  * </dl>
  */
 struct NoteFilter {
@@ -480,9 +501,11 @@ struct NoteFilter {
   7: optional  bool inactive,
   8: optional  string emphasized,
   9: optional  bool includeAllReadableNotebooks,
-  10: optional string context
+  15: optional bool includeAllReadableWorkspaces,
+  10: optional string context,
+  11: optional string rawWords,
+  12: optional binary searchContextBytes,
 }
-
 
 /**
  * A small structure for returning a list of notes out of a larger set.
@@ -532,7 +555,19 @@ struct NoteFilter {
  *   This number is the "high water mark" for Update Sequence Numbers (USN)
  *   within the account.
  *   </dd>
+ *
+ * <dt>searchContextBytes</dt>
+ *   <dd>
+ *   Specifies the correlating information about the current search session, in byte array.
+ *   </dd>
  * </dl>
+ *
+ * <dt>debugInfo</dt>
+ *   <dd>
+ *   Depends on the value of <code>context</code> in NoteFilter, this field
+ *   may contain debug information if the service decides to do so.
+ *   </dd>
+ *
  */
 struct NoteList {
   1: required  i32 startIndex,
@@ -540,7 +575,9 @@ struct NoteList {
   3: required  list<Types.Note> notes,
   4: optional  list<string> stoppedWords,
   5: optional  list<string> searchedWords,
-  6: optional  i32 updateCount
+  6: optional  i32 updateCount,
+  7: optional  binary searchContextBytes,
+  8: optional  string debugInfo
 }
 
 /**
@@ -633,6 +670,18 @@ struct NoteMetadata {
  *   This number is the "high water mark" for Update Sequence Numbers (USN)
  *   within the account.
  *   </dd>
+ *
+ * <dt>searchContextBytes</dt>
+ *   <dd>
+ *   Specifies the correlating information about the current search session, in byte array.
+ *   </dd>
+ *
+ * <dt>debugInfo</dt>
+ *   <dd>
+ *   Depends on the value of <code>context</code> in NoteFilter, this field
+ *   may contain debug information if the service decides to do so.
+ *   </dd>
+ *
  * </dl>
  */
 struct NotesMetadataList {
@@ -641,7 +690,9 @@ struct NotesMetadataList {
   3:  required  list<NoteMetadata> notes,
   4:  optional  list<string> stoppedWords,
   5:  optional  list<string> searchedWords,
-  6:  optional  i32 updateCount
+  6:  optional  i32 updateCount,
+  7:  optional  binary searchContextBytes,
+  9:  optional  string debugInfo
 }
 
 /**
@@ -999,6 +1050,7 @@ struct RelatedResult {
   2: optional list<Types.Notebook> notebooks,
   3: optional list<Types.Tag> tags,
   4: optional list<Types.NotebookDescriptor> containingNotebooks,
+  5: optional string debugInfo,
   6: optional list<Types.UserProfile> experts,
   7: optional list<Types.RelatedContent> relatedContent,
   8: optional string cacheKey,
@@ -1044,6 +1096,11 @@ struct RelatedResult {
  *     to which the returned related notes belong.</dd>
  * </dl>
  *
+ * <dt>includeDebugInfo</dt>
+ * <dd>If set to <code>true</code>, indicate that debug information should
+ *     be returned in the 'debugInfo' field of RelatedResult. Note that the call may
+ *     be slower if this flag is set.</dd>
+ *
  * <dt>maxExperts</dt>
  * <dd>This can only be used when making a findRelated call against a business.
  *  Find users within your business who have knowledge about the specified query.
@@ -1067,6 +1124,7 @@ struct RelatedResultSpec {
   3: optional i32 maxTags,
   4: optional bool writableNotebooksOnly,
   5: optional bool includeContainingNotebooks,
+  6: optional bool includeDebugInfo,
   7: optional i32 maxExperts,
   8: optional i32 maxRelatedContent,
   9: optional set<Types.RelatedContentType> relatedContentTypes,
@@ -1164,9 +1222,11 @@ enum ShareRelationshipPrivilegeLevel {
  *
  * <dt>recipientUserIdentity</dt>
  * <dd>Identifies the recipient of the invitation. The user identity
- * type can be either EMAIL or IDENTITYID, depending on whether the
- * invitation was created using the classic notebook sharing APIs or
- * the new identity-based notebook sharing APIs.
+ * type can be either EMAIL, EVERNOTE or IDENTITYID. If the
+ * invitation was created using the classic notebook sharing APIs it will be EMAIL. If it
+ * was created using the new identity-based notebook sharing APIs it will either be
+ * EVERNOTE or IDENTITYID, depending on whether we can map the identity to an Evernote
+ * user at the time of creation.
  * </dd>
  *
  * <dt>privilege</dt>
@@ -1312,11 +1372,11 @@ struct ShareRelationships {
  *
  * <dt>unshares</dt>
  * <dd>The list of share relationships to expunge from the service.
- * If the user identity is for an Evernote UserID, then memberships will
- * be removed. If it's an e-mail, then e-mail based shared notebook
- * invitations will be removed. If it's for an Identity ID, then
- * any invitations that match the identity (by identity ID or user ID or
- * e-mail for legacy invitations) will be removed.</dd>
+ * If the user identity is for an Evernote UserID, then matching invitations or
+ * memberships will be removed. If it's an e-mail, then e-mail based shared notebook
+ * invitations will be removed. If it's for an Identity ID, then any invitations that
+ * match the identity (by identity ID or user ID or e-mail for legacy invitations) will be
+ * removed.</dd>
  * </dl>
  */
 struct ManageNotebookSharesParameters {
@@ -1962,15 +2022,29 @@ service NoteStore {
    *        the passed authenticationToken.</li>
    *   <li> LIMIT_REACHED "Notebook" - at max number of notebooks</li>
    * </ul>
+   *
+   * @throws EDAMNotFoundException <ul>
+   *   <li> "Workspace.guid" - if workspaceGuid set and no Workspace exists for the GUID
+   *   </li>
+   * </ul>
    */
   Types.Notebook createNotebook(1: string authenticationToken,
                                 2: Types.Notebook notebook)
     throws (1: Errors.EDAMUserException userException,
-            2: Errors.EDAMSystemException systemException),
+            2: Errors.EDAMSystemException systemException,
+            3: Errors.EDAMNotFoundException notFoundException),
 
   /**
-   * Submits notebook changes to the service.  The provided data must include
-   * the notebook's guid field for identification.
+   * Submits notebook changes to the service. The provided data must include the
+   * notebook's guid field for identification.
+   * <p />
+   * The Notebook will be moved to the specified Workspace, if a non empty
+   * Notebook.workspaceGuid is provided. If an empty Notebook.workspaceGuid is set and the
+   * Notebook is in a Workspace, then it will be removed from the Workspace and a full
+   * access SharedNotebook record will be ensured for the caller. If the caller does not
+   * already have a full access share, either the privilege of an existing share will be
+   * upgraded or a new share will be created. It is illegal to set a
+   * Notebook.workspaceGuid on a Workspace backing Notebook.
    *
    * @param notebook
    *   The notebook object containing the requested changes.
@@ -1993,7 +2067,9 @@ service NoteStore {
    * </ul>
    *
    * @throws EDAMNotFoundException <ul>
-   *   <li> "Notebook.guid" - not found, by GUID
+   *   <li> "Notebook.guid" - not found, by GUID</li>
+   *   <li> "Workspace.guid" - if a non empty workspaceGuid set and no Workspace exists
+   *        for the GUID
    *   </li>
    * </ul>
    */
@@ -2501,8 +2577,8 @@ service NoteStore {
    * Returns the current state of the note in the service with the provided
    * GUID.  The ENML contents of the note will only be provided if the
    * 'withContent' parameter is true.  The service will include the meta-data
-   * for each resource in the note, but the binary contents of the resources
-   * and their recognition data will be omitted.
+   * for each resource in the note, but the binary content depends
+   * on whether it is explicitly requested in resultSpec parameter.
    * If the Note is found in a public notebook, the authenticationToken
    * will be ignored (so it could be an empty string).  The applicationData
    * fields are returned as keysOnly.
@@ -2739,6 +2815,10 @@ service NoteStore {
    * @return
    *   The newly created Note from the service.  The server-side
    *   GUIDs for the Note and any Resources will be saved in this object.
+   *   The service will include the meta-data
+   *   for each resource in the note, but the binary contents of the resources
+   *   and their recognition data will be omitted (except Recognition Resource body,
+   *   for which the behavior is unspecified).
    *
    * @throws EDAMUserException <ul>
    *   <li> BAD_DATA_FORMAT "Note.title" - invalid length or pattern
@@ -2807,8 +2887,10 @@ service NoteStore {
    *   resources is not being modified, note.resources should be left unset.
    *
    * @return
-   *   The metadata (no contents) for the Note on the server after the update.
    *   The Note.sharedNotes field will not be set.
+   *   The service will include the meta-data
+   *   for each resource in the note, but the binary contents of the resources
+   *   and their recognition data will be omitted.
    *
    * @throws EDAMUserException <ul>
    *   <li> BAD_DATA_FORMAT "Note.title" - invalid length or pattern
@@ -3485,8 +3567,8 @@ service NoteStore {
    *       set. requireLogin is deprecated.</li>
    *   <li>BAD_DATA_FORMAT "SharedNotebook.privilegeLevel" - if the
    *       SharedNotebook.privilegeLevel field was unset or set to GROUP.</li>
-   *   <li>PERMISSION_DENIED "emailConfirmation" - if the email address on the
-   *       authenticationToken's owner's account is not confirmed.</li>
+   *   <li>PERMISSION_DENIED "user" - if the email address on the authenticationToken's
+           owner's account is not confirmed.</li>
    *   <li>PERMISSION_DENIED "SharedNotebook.recipientSettings" - if
    *       recipientSettings is set in the sharedNotebook.  Only the recipient
    *       can set these values via the setSharedNotebookRecipientSettings
@@ -3588,6 +3670,8 @@ service NoteStore {
    *
    * If recipientSettings.inMyList is false, both reminderNotifyInApp and reminderNotifyEmail
    * will be either left as null or converted to false (if currently true).
+   *
+   * To unset a notebook's stack, pass in the empty string for the stack field.
    *
    * @param authenticationToken The owner authentication token for the recipient of the share.
    *

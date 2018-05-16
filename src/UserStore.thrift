@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2016 Evernote Corporation. All rights reserved.
+ * Copyright 2007-2018 Evernote Corporation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -488,6 +488,7 @@ service UserStore {
    *   <li> INVALID_AUTH "password" - password did not match
    *   <li> INVALID_AUTH "consumerKey" - consumerKey is not authorized
    *   <li> INVALID_AUTH "consumerSecret" - consumerSecret is incorrect
+   *   <li> INVALID_AUTH "businessOnly" - the user is a business-only account
    *   <li> PERMISSION_DENIED "User.active" - user account is closed
    *   <li> PERMISSION_DENIED "User.tooManyFailuresTryAgainLater" - user has
    *     failed authentication too often
